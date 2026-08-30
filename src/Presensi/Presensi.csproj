@@ -22,9 +22,12 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>Presensi</AssemblyName>
     <RootNamespace>Presensi</RootNamespace>
-    <!-- Logo resmi SDIT Al-Ikhlas / YAI 86 - sumber sama dgn ikon aplikasi
-         native (Mobile-app/Aplikasi/assets/icon.png), dikonversi ke .ico
-         multi-resolusi (16-256px) via Pillow. -->
+    <!-- Logo resmi SDIT Al-Ikhlas / YAI 86 - sumber PNG asli DISERTAKAN di
+         repo ini (Assets/icon-source.png, resolusi 1080x1080 dgn alpha
+         asli - bukan lagi bergantung folder eksternal D:\icon\ di laptop
+         manapun), dikonversi ke .ico multi-resolusi (16-256px) via Pillow.
+         Kalau logo resmi berubah lagi nanti, timpa icon-source.png lalu
+         generate ulang app.ico dari file itu. -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <!-- Windows 7 tidak pernah dapat .NET 8 - baris ini murni informatif,

@@ -250,6 +250,20 @@ public partial class MainWindow : Window
             else
             {
                 StatusText.Text = result.Message ?? "Tidak dikenali.";
+
+                // Wajah/identitas BERHASIL dikenali (server tahu ini siapa)
+                // tapi presensinya ditolak krn alasan wajar (mis. "Sudah
+                // presensi masuk hari ini") - BUKAN kegagalan pengenalan.
+                // Tanpa cooldown di sini, org yang masih berdiri di depan
+                // kamera bikin sistem coba scan ulang tiap <1 detik dan
+                // pesan "Berhasil" yang tadi sempat tampil langsung
+                // ketiban pesan ini - kelihatan spt gagal padahal barusan
+                // sukses (ditemukan LANGSUNG dari laporan pengujian nyata,
+                // data di database TETAP benar, ini murni bug tampilan).
+                if (!string.IsNullOrEmpty(result.PersonName))
+                {
+                    _cooldownUntil = DateTime.UtcNow.Add(CooldownAfterSuccess);
+                }
             }
         });
     }
