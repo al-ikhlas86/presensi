@@ -1,0 +1,46 @@
+name: Build Presensi
+
+# Manual SAJA (workflow_dispatch) - SENGAJA tidak jalan otomatis tiap push
+# (keputusan eksplisit user 2026-08-31: commit/push sehari-hari boleh
+# sesering apa pun tanpa memicu compile, baru jalankan build kalau memang
+# sudah dinyatakan siap). Compile 100% di server GitHub sendiri (runner
+# windows-latest) - TIDAK menyentuh VPS Oracle sama sekali, TIDAK melanggar
+# aturan Oracle Cloud Free Tier (2 hal itu benar-benar infrastruktur
+# terpisah).
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        # net48 = Windows 7 SP1 ke atas, net8.0-windows = Windows 10/11.
+        # 1 codebase, 2 hasil build terpisah - lihat catatan multi-target
+        # di Presensi.csproj.
+        target: [net48, net8.0-windows]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore src/Presensi/Presensi.csproj
+
+      - name: Publish (net48)
+        if: matrix.target == 'net48'
+        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net48 -o publish/net48
+
+      - name: Publish (net8.0-windows, self-contained win-x64)
+        if: matrix.target == 'net8.0-windows'
+        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net8.0-windows -r win-x64 --self-contained true -p:PublishReadyToRun=false -o publish/net8.0-windows
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Presensi-${{ matrix.target }}
+          path: publish/${{ matrix.target }}
+          retention-days: 30

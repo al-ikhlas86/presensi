@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      Multi-target SENGAJA (2026-08-31, keputusan user): net48 utk PC
+      Windows 7 SP1 ke atas yang masih dipakai sekolah, net8.0-windows
+      utk PC Windows 10/11 modern - SATU codebase, SATU repo, CI build
+      MENGHASILKAN 2 installer terpisah tiap kali rilis. Jangan pisah jadi
+      2 project/repo - nyaris seluruh kode (UI, logic kamera/scanner)
+      sama persis, cuma target runtime yang beda.
+    -->
+    <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- LangVersion dipaksa "latest" utk KEDUA target - net48 secara
+         DEFAULT cuma dapat C# 7.3 dari SDK modern, padahal fitur bahasa
+         (namespace file-scoped, dll) yang dipakai di sini butuh C# 10+.
+         Ini aman: fitur bahasa murni compile-time, tidak bergantung API
+         runtime yang tidak ada di net48. -->
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Presensi</AssemblyName>
+    <RootNamespace>Presensi</RootNamespace>
+    <!-- TODO: tambahkan ApplicationIcon (Assets/app.ico) begitu logo resmi
+         Al-Ikhlas 86 (lihat aset yang sudah dipakai di Mobile-app) sudah
+         dikonversi ke .ico - sengaja belum diisi supaya build tidak gagal
+         gara-gara file belum ada. -->
+    <Platforms>x64</Platforms>
+    <!-- Windows 7 tidak pernah dapat .NET 8 - baris ini murni informatif,
+         pemisahan runtime SUNGGUHAN terjadi via TargetFrameworks di atas. -->
+    <SupportedOSPlatformVersion Condition="'$(TargetFramework)'=='net8.0-windows'">7.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- OpenCvSharp4 - satu-satunya library kamera yang dikonfirmasi jalan
+         di KEDUA target (net48 & net8.0-windows) dari 1 referensi yang
+         sama, jadi kode capture kamera tidak perlu #if TARGET beda-beda. -->
+    <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
+    <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.0.20241108" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Paket NuGet System.IO.Ports (BUKAN <Reference> assembly klasik) -
+         dipakai utk KEDUA target sekaligus, resmi mendukung net461+ jadi
+         net48 ikut ter-cover dari 1 baris yang sama, tidak perlu cabang
+         per-target lagi. -->
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <!-- Reference assemblies net48 LENGKAP dari NuGet (bukan andalkan yang
+         kebetulan terpasang di mesin/CI) - build jadi 100% reproducible,
+         tidak bergantung Visual Studio full/dev-pack apa yang terinstal
+         di komputer manapun (lokal maupun runner GitHub Actions). -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

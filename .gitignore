@@ -1,0 +1,21 @@
+## .NET / Visual Studio
+bin/
+obj/
+*.user
+.vs/
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build output
+publish/
+*.zip
+*.msi
+
+## Rider/VSCode
+.idea/
+.vscode/
+
+## OS
+Thumbs.db
+.DS_Store
