@@ -49,6 +49,13 @@
     <PackageReference Include="System.IO.Ports" Version="8.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Disertakan ke folder hasil publish/build (bukan cuma di source) -
+         supaya orang yang install dari artifact CI langsung ketemu
+         contohnya di sebelah Presensi.exe, tidak perlu buka source code. -->
+    <None Include="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <!-- Reference assemblies net48 LENGKAP dari NuGet (bukan andalkan yang
          kebetulan terpasang di mesin/CI) - build jadi 100% reproducible,
