@@ -41,8 +41,8 @@ public partial class FilterManagerWindow : Window
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Gambar PNG (*.png)|*.png",
-            Title = "Pilih gambar filter (PNG, idealnya latar transparan)",
+            Filter = "Semua filter (*.png;*.stiker)|*.png;*.stiker|Bingkai statis PNG (*.png)|*.png|Stiker nempel wajah (*.stiker)|*.stiker",
+            Title = "Pilih file filter (.png bingkai statis, atau .stiker nempel wajah)",
         };
         if (dialog.ShowDialog(this) != true) return;
 

@@ -9,7 +9,7 @@
         Closing="Window_Closing">
     <DockPanel Margin="20">
         <TextBlock DockPanel.Dock="Top" Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,12"
-                   Text="Upload file PNG (idealnya latar transparan) sebagai filter baru. Filter &quot;Normal&quot; adalah bawaan dan tidak bisa dihapus." />
+                   Text="Upload .png (bingkai statis di seluruh layar) atau .stiker (nempel &amp; ikut gerak wajah, mis. astronot/kacamata). Filter &quot;Normal&quot; adalah bawaan dan tidak bisa dihapus." />
 
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,12">
             <Button x:Name="UploadButton" Content="Upload Filter (.png)..." Padding="12,8" Margin="0,0,8,0" Click="Upload_Click" />

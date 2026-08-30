@@ -17,21 +17,23 @@ public static class FilterManager
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Presensi", "filters");
 
+    private static readonly string[] SupportedExtensions = { ".png", ".stiker" };
+
     public static void EnsureSeeded()
     {
         try
         {
             Directory.CreateDirectory(FiltersDir);
-            if (Directory.GetFiles(FiltersDir, "*.png").Length > 0) return;
+            if (Directory.EnumerateFiles(FiltersDir).Any(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))) return;
 
-            // Contoh filter bawaan (originaL, dibuat sendiri - lihat
+            // Contoh filter bawaan (original, dibuat sendiri - lihat
             // README/Projek.md soal kenapa bukan diunduh dari internet)
             // disalin sekali di first-run supaya user langsung punya
             // sesuatu utk dicoba tanpa perlu upload dulu.
             var sampleDir = Path.Combine(AppContext.BaseDirectory, "SampleFilters");
             if (!Directory.Exists(sampleDir)) return;
 
-            foreach (var file in Directory.GetFiles(sampleDir, "*.png"))
+            foreach (var file in Directory.EnumerateFiles(sampleDir).Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())))
             {
                 var dest = Path.Combine(FiltersDir, Path.GetFileName(file));
                 if (!File.Exists(dest)) File.Copy(file, dest);
@@ -49,11 +51,20 @@ public static class FilterManager
         try
         {
             Directory.CreateDirectory(FiltersDir);
-            foreach (var file in Directory.GetFiles(FiltersDir, "*.png").OrderBy(f => f))
+            var files = Directory.EnumerateFiles(FiltersDir)
+                .Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))
+                .OrderBy(f => f);
+
+            foreach (var file in files)
             {
                 try
                 {
-                    list.Add(new ImageOverlayFilter(file));
+                    IPreviewFilter filter = Path.GetExtension(file).ToLowerInvariant() switch
+                    {
+                        ".stiker" => new FaceStickerFilter(file),
+                        _ => new ImageOverlayFilter(file),
+                    };
+                    list.Add(filter);
                 }
                 catch (Exception ex)
                 {
@@ -68,12 +79,18 @@ public static class FilterManager
         return list;
     }
 
-    /// <summary>Salin file PNG yang dipilih user ke folder filter. Melempar exception dgn pesan Indonesia kalau ekstensi tidak didukung.</summary>
+    /// <summary>
+    /// Salin file filter yang dipilih user ke folder filter - ".png" (bingkai
+    /// statis full-frame) atau ".stiker" (nempel-di-wajah, lihat
+    /// FaceStickerFilter). Melempar exception dgn pesan Indonesia kalau
+    /// ekstensi tidak didukung.
+    /// </summary>
     public static string Import(string sourceFilePath)
     {
-        if (!string.Equals(Path.GetExtension(sourceFilePath), ".png", StringComparison.OrdinalIgnoreCase))
+        var ext = Path.GetExtension(sourceFilePath).ToLowerInvariant();
+        if (!SupportedExtensions.Contains(ext))
         {
-            throw new InvalidOperationException("Hanya file .png yang didukung (idealnya dgn latar transparan).");
+            throw new InvalidOperationException("Cuma file .png (bingkai statis) atau .stiker (nempel di wajah) yang didukung.");
         }
 
         Directory.CreateDirectory(FiltersDir);
@@ -82,7 +99,7 @@ public static class FilterManager
         var i = 1;
         while (File.Exists(dest))
         {
-            dest = Path.Combine(FiltersDir, Path.GetFileNameWithoutExtension(destName) + $"_{i}.png");
+            dest = Path.Combine(FiltersDir, Path.GetFileNameWithoutExtension(destName) + $"_{i}" + ext);
             i++;
         }
         File.Copy(sourceFilePath, dest);

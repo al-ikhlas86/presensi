@@ -36,6 +36,7 @@
     <!-- OpenCvSharp4 - satu-satunya library kamera yang dikonfirmasi jalan
          di KEDUA target (net48 & net8.0-windows) dari 1 referensi yang
          sama, jadi kode capture kamera tidak perlu #if TARGET beda-beda. -->
+    <PackageReference Include="DlibDotNet" Version="19.21.0.20220724" />
     <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.0.20241108" />
@@ -65,8 +66,9 @@
          Projek.md soal alasannya bukan diunduh dari internet) - disalin ke
          folder filter user PERTAMA KALI aplikasi jalan (lihat
          FilterManager.EnsureSeeded()), supaya langsung ada yang bisa dicoba
-         tanpa perlu upload dulu. -->
-    <None Include="Assets\SampleFilters\*.png" CopyToOutputDirectory="PreserveNewest">
+         tanpa perlu upload dulu. Termasuk .png (bingkai statis) MAUPUN
+         .stiker (bundle nempel-wajah, lihat FaceStickerFilter). -->
+    <None Include="Assets\SampleFilters\*.png;Assets\SampleFilters\*.stiker" CopyToOutputDirectory="PreserveNewest">
       <Link>SampleFilters\%(Filename)%(Extension)</Link>
     </None>
   </ItemGroup>
@@ -81,6 +83,12 @@
          net48 (klasik) butuh paket NuGet terpisah utk keduanya. -->
     <Reference Include="System.Net.Http" />
     <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <!-- ZipFile (System.IO.Compression.ZipFile) - dipakai FaceStickerFilter
+         baca bundle .stiker - di .NET Framework klasik ada di assembly
+         TERPISAH (System.IO.Compression.FileSystem), tidak seperti
+         net8.0-windows yang sudah menyatu di SDK. -->
+    <Reference Include="System.IO.Compression.FileSystem" />
+    <Reference Include="System.IO.Compression" />
   </ItemGroup>
 
 </Project>

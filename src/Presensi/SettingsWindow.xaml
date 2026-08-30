@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Pengaturan Jam Presensi"
         Icon="Assets/app.ico"
-        Height="260" Width="420"
+        SizeToContent="Height" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         Background="#1A1D1F">
