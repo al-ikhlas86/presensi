@@ -30,7 +30,7 @@ public partial class MainWindow : Window
 
     private readonly ICameraService _camera = new CameraService();
     private readonly IBarcodeScannerService _scanner = new SerialBarcodeScannerService();
-    private readonly IAttendanceApiClient _api = new StubAttendanceApiClient(); // lihat catatan di class-nya
+    private readonly IAttendanceApiClient _api;
     private readonly SoundService _sound = new();
 
     private readonly IPreviewFilter[] _filters =
@@ -49,6 +49,21 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Token kiosk KOSONG = belum dikonfigurasi (appsettings.json baru
+        // dibuat pertama kali) - pakai Stub sementara drpd nge-spam error
+        // "tidak bisa menghubungi server" ke Absen. Isi appsettings.json
+        // (di sebelah .exe) lalu buka ulang aplikasi begitu token sudah ada.
+        var config = AppConfig.Load();
+        if (string.IsNullOrWhiteSpace(config.KioskToken))
+        {
+            Logging.Log.Warn("KioskToken kosong di appsettings.json - jalan mode UJI (tidak benar-benar mengirim presensi).");
+            _api = new StubAttendanceApiClient();
+        }
+        else
+        {
+            _api = new AbsenAttendanceApiClient { BaseUrl = config.BaseUrl, KioskToken = config.KioskToken };
+        }
 
         FilterCombo.ItemsSource = _filters;
         FilterCombo.DisplayMemberPath = nameof(IPreviewFilter.DisplayName);

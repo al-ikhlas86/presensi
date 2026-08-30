@@ -6,8 +6,9 @@ hotkey/CDC/CMD/Node.js buat standby di layar browser. Presensi tetap
 tercatat di latar belakang meski preview kamera dimatikan atau user sedang
 memakai aplikasi lain (Excel dsb).
 
-**Status saat ini: fondasi/skeleton, BELUM terhubung ke server Absen
-sungguhan.** Lihat bagian "Yang belum" di bawah.
+**Status saat ini: SUDAH terhubung ke server sungguhan (Absen, lewat
+Mobile-app backend) - diuji end-to-end nyata sampai ke database.** Lihat
+bagian "Konfigurasi" di bawah sebelum menjalankan di PC sekolah.
 
 ## Kenapa 2 target build (net48 + net8.0-windows)?
 
@@ -31,14 +32,26 @@ Satu solusi Visual Studio, satu `.csproj`, kode 99% sama - CI menghasilkan
 - [x] Absen Masuk/Pulang (toggle mode di UI)
 - [x] Nada "berhasil" (bukan suara robot, cukup 2 nada pendek - `Services/SoundService.cs`)
 - [x] Scan barcode via scanner mode CDC (serial port) - `Services/SerialBarcodeScannerService.cs`
+- [x] **Presensi sungguhan** - identifikasi wajah & checkin barcode
+      terhubung ke server produksi (`Services/AbsenAttendanceApiClient.cs`),
+      via Mobile-app backend, yang meneruskan ke Absen. Sudah diuji nyata
+      sampai tersimpan di `attendance_logs`.
+
+## Konfigurasi (WAJIB sebelum dipakai di PC sekolah)
+
+Salin `src/Presensi/appsettings.example.json` jadi `appsettings.json` di
+folder yang SAMA dengan `Presensi.exe` (bukan di source code), isi
+`KioskToken` dengan token dari server (minta ke Admin IT - tersimpan di
+`.env` Mobile-app backend sbg `KIOSK_API_TOKEN`). **Jangan pernah commit
+`appsettings.json` yang sudah berisi token asli** (sudah di-`.gitignore`).
+
+Kalau `appsettings.json` belum ada / `KioskToken` masih kosong, aplikasi
+otomatis jalan di **mode uji** (`StubAttendanceApiClient` - selalu bilang
+"berhasil" palsu, tidak benar-benar mengirim presensi) supaya tetap bisa
+dicoba tanpa token dulu.
 
 ## Yang BELUM (sengaja, lihat komentar di kode)
 
-- **Belum terhubung ke Absen sungguhan.** `Services/StubAttendanceApiClient.cs`
-  selalu balas "berhasil" palsu - dipakai supaya alur UI penuh bisa diuji
-  duluan. Endpoint asli di Absen (berbasis token, BUKAN sesi login browser
-  - lihat catatan di `IAttendanceApiClient.cs`) perlu dirancang dulu
-  sebelum diimplementasikan sungguhan.
 - Belum ada installer/auto-updater (Velopack) - baru `dotnet publish` polos.
 - Belum ada ikon aplikasi (`ApplicationIcon` sengaja dikosongkan di `.csproj`).
 - Belum ada UI pemilihan kamera/COM-port yang proper (masih ambil device

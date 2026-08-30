@@ -19,3 +19,7 @@ publish/
 ## OS
 Thumbs.db
 .DS_Store
+
+## Konfigurasi per-PC (berisi token kiosk sungguhan) - JANGAN pernah commit
+src/Presensi/appsettings.json
+

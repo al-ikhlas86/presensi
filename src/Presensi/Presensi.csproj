@@ -55,6 +55,10 @@
          tidak bergantung Visual Studio full/dev-pack apa yang terinstal
          di komputer manapun (lokal maupun runner GitHub Actions). -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <!-- net8.0-windows sudah punya HttpClient & System.Text.Json bawaan -
+         net48 (klasik) butuh paket NuGet terpisah utk keduanya. -->
+    <Reference Include="System.Net.Http" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
 </Project>
