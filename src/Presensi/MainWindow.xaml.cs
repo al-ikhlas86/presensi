@@ -1,8 +1,11 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using OpenCvSharp;
 using OpenCvSharp.WpfExtensions;
 using Presensi.Filters;
@@ -30,16 +33,14 @@ public partial class MainWindow : Window
 
     private readonly ICameraService _camera = new CameraService();
     private readonly IBarcodeScannerService _scanner = new SerialBarcodeScannerService();
-    private readonly IAttendanceApiClient _api;
+    private IAttendanceApiClient _api;
     private readonly SoundService _sound = new();
+    private AppConfig _config;
 
-    private readonly IPreviewFilter[] _filters =
-    {
-        new NoFilter(),
-        ThemedBorderFilter.Kemerdekaan(),
-        ThemedBorderFilter.Ramadan(),
-    };
+    private List<IPreviewFilter> _filters = new();
     private IPreviewFilter _activeFilter = new NoFilter();
+
+    private readonly DispatcherTimer _modeTimer = new() { Interval = TimeSpan.FromSeconds(10) };
 
     private AttendanceMode _mode = AttendanceMode.Masuk;
     private DateTime _lastIdentifyAttempt = DateTime.MinValue;
@@ -50,24 +51,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Token kiosk KOSONG = belum dikonfigurasi (appsettings.json baru
-        // dibuat pertama kali) - pakai Stub sementara drpd nge-spam error
-        // "tidak bisa menghubungi server" ke Absen. Isi appsettings.json
-        // (di sebelah .exe) lalu buka ulang aplikasi begitu token sudah ada.
-        var config = AppConfig.Load();
-        if (string.IsNullOrWhiteSpace(config.KioskToken))
-        {
-            Logging.Log.Warn("KioskToken kosong di appsettings.json - jalan mode UJI (tidak benar-benar mengirim presensi).");
-            _api = new StubAttendanceApiClient();
-        }
-        else
-        {
-            _api = new AbsenAttendanceApiClient { BaseUrl = config.BaseUrl, KioskToken = config.KioskToken };
-        }
+        _config = AppConfig.Load();
+        _api = BuildApiClient(_config);
 
-        FilterCombo.ItemsSource = _filters;
-        FilterCombo.DisplayMemberPath = nameof(IPreviewFilter.DisplayName);
-        FilterCombo.SelectedIndex = 0;
+        FilterManager.EnsureSeeded();
+        ReloadFilters();
+
+        UpdateModeDisplay();
+        _modeTimer.Tick += (_, _) => UpdateModeDisplay();
+        _modeTimer.Start();
 
         _camera.PreviewFrameCaptured += OnPreviewFrameCaptured;
         _camera.RawFrameCaptured += OnRawFrameCaptured;
@@ -78,9 +70,63 @@ public partial class MainWindow : Window
         Loaded += (_, _) => _camera.Start();
     }
 
-    private void ModeChanged(object sender, RoutedEventArgs e)
+    private static IAttendanceApiClient BuildApiClient(AppConfig config)
     {
-        _mode = RbMasuk.IsChecked == true ? AttendanceMode.Masuk : AttendanceMode.Pulang;
+        // Token kiosk KOSONG = belum dikonfigurasi (appsettings.json baru
+        // dibuat pertama kali) - pakai Stub sementara drpd nge-spam error
+        // "tidak bisa menghubungi server" ke Absen. Isi appsettings.json
+        // (di sebelah .exe) lalu buka ulang aplikasi begitu token sudah ada.
+        if (string.IsNullOrWhiteSpace(config.KioskToken))
+        {
+            Logging.Log.Warn("KioskToken kosong di appsettings.json - jalan mode UJI (tidak benar-benar mengirim presensi).");
+            return new StubAttendanceApiClient();
+        }
+        return new AbsenAttendanceApiClient { BaseUrl = config.BaseUrl, KioskToken = config.KioskToken };
+    }
+
+    private void UpdateModeDisplay()
+    {
+        _mode = ScheduleService.GetCurrentMode(_config);
+        ModeText.Text = "Mode: " + (_mode == AttendanceMode.Masuk ? "MASUK" : "PULANG");
+        ModeText.Foreground = _mode == AttendanceMode.Masuk
+            ? new SolidColorBrush(Color.FromRgb(0x4A, 0xDE, 0x80))
+            : new SolidColorBrush(Color.FromRgb(0xFB, 0xBF, 0x24));
+        ModeScheduleText.Text = $"(otomatis - masuk sblm {_config.JamPulang}, pulang mulai {_config.JamPulang})";
+    }
+
+    private void ReloadFilters()
+    {
+        var previousName = _activeFilter.DisplayName;
+        foreach (var f in _filters)
+        {
+            if (f is IDisposable d) d.Dispose();
+        }
+
+        _filters = FilterManager.LoadAll();
+        FilterCombo.ItemsSource = _filters;
+
+        var match = _filters.FirstOrDefault(f => f.DisplayName == previousName) ?? _filters[0];
+        FilterCombo.SelectedItem = match;
+        _activeFilter = match;
+    }
+
+    private void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsWindow(_config) { Owner = this };
+        if (dialog.ShowDialog() == true)
+        {
+            UpdateModeDisplay();
+        }
+    }
+
+    private void ManageFilterButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new FilterManagerWindow { Owner = this };
+        dialog.ShowDialog();
+        if (dialog.FiltersChanged)
+        {
+            ReloadFilters();
+        }
     }
 
     private void FilterCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -210,7 +256,12 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        _modeTimer.Stop();
         _camera.Dispose();
         _scanner.Dispose();
+        foreach (var f in _filters)
+        {
+            if (f is IDisposable d) d.Dispose();
+        }
     }
 }

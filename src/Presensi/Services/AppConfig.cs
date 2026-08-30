@@ -16,6 +16,15 @@ public sealed class AppConfig
     public string BaseUrl { get; set; } = "https://alikhlas86.duckdns.org/mobile-api";
     public string KioskToken { get; set; } = "";
 
+    /// <summary>
+    /// Format "HH:mm". Batas waktu MASUK -> otomatis dianggap PULANG mulai
+    /// jam ini (menggantikan toggle manual Masuk/Pulang - lihat
+    /// ScheduleService.GetCurrentMode()). JamMasuk sendiri murni informasi
+    /// yang ditampilkan di UI, cutoff sesungguhnya pakai JamPulang saja.
+    /// </summary>
+    public string JamMasuk { get; set; } = "06:30";
+    public string JamPulang { get; set; } = "15:00";
+
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
     public static AppConfig Load()

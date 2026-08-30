@@ -22,10 +22,10 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>Presensi</AssemblyName>
     <RootNamespace>Presensi</RootNamespace>
-    <!-- TODO: tambahkan ApplicationIcon (Assets/app.ico) begitu logo resmi
-         Al-Ikhlas 86 (lihat aset yang sudah dipakai di Mobile-app) sudah
-         dikonversi ke .ico - sengaja belum diisi supaya build tidak gagal
-         gara-gara file belum ada. -->
+    <!-- Logo resmi SDIT Al-Ikhlas / YAI 86 - sumber sama dgn ikon aplikasi
+         native (Mobile-app/Aplikasi/assets/icon.png), dikonversi ke .ico
+         multi-resolusi (16-256px) via Pillow. -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>x64</Platforms>
     <!-- Windows 7 tidak pernah dapat .NET 8 - baris ini murni informatif,
          pemisahan runtime SUNGGUHAN terjadi via TargetFrameworks di atas. -->
@@ -50,10 +50,25 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Resource (bukan cuma ApplicationIcon) - supaya Icon="Assets/app.ico"
+         di MainWindow.xaml (ikon title bar/taskbar saat aplikasi JALAN)
+         ikut ter-pack, bukan cuma ikon .exe di File Explorer. -->
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Disertakan ke folder hasil publish/build (bukan cuma di source) -
          supaya orang yang install dari artifact CI langsung ketemu
          contohnya di sebelah Presensi.exe, tidak perlu buka source code. -->
     <None Include="appsettings.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 3 filter contoh (ORIGINAL, dibuat sendiri lewat script Pillow - lihat
+         Projek.md soal alasannya bukan diunduh dari internet) - disalin ke
+         folder filter user PERTAMA KALI aplikasi jalan (lihat
+         FilterManager.EnsureSeeded()), supaya langsung ada yang bisa dicoba
+         tanpa perlu upload dulu. -->
+    <None Include="Assets\SampleFilters\*.png" CopyToOutputDirectory="PreserveNewest">
+      <Link>SampleFilters\%(Filename)%(Extension)</Link>
+    </None>
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">

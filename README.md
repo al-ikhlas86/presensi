@@ -29,13 +29,46 @@ Satu solusi Visual Studio, satu `.csproj`, kode 99% sama - CI menghasilkan
       belakang - lihat `Services/CameraService.cs`)
 - [x] Filter dekoratif di preview (murni tampilan, TIDAK PERNAH menyentuh
       frame yang dikirim ke pengenalan wajah - lihat `Filters/`)
-- [x] Absen Masuk/Pulang (toggle mode di UI)
+- [x] Absen Masuk/Pulang **OTOMATIS** berdasar jam PC + jadwal yang diatur
+      lewat tombol "Pengaturan..." (`Services/ScheduleService.cs`) - tidak
+      ada lagi toggle manual, sebelum jam Pulang = Masuk, jam Pulang ke
+      atas = Pulang.
 - [x] Nada "berhasil" (bukan suara robot, cukup 2 nada pendek - `Services/SoundService.cs`)
 - [x] Scan barcode via scanner mode CDC (serial port) - `Services/SerialBarcodeScannerService.cs`
 - [x] **Presensi sungguhan** - identifikasi wajah & checkin barcode
       terhubung ke server produksi (`Services/AbsenAttendanceApiClient.cs`),
       via Mobile-app backend, yang meneruskan ke Absen. Sudah diuji nyata
       sampai tersimpan di `attendance_logs`.
+- [x] Ikon aplikasi - logo resmi SDIT Al-Ikhlas / YAI 86.
+- [x] **Kelola Filter** (tombol "Kelola Filter..." di sebelah dropdown
+      filter) - upload/hapus filter sendiri, format **PNG dengan latar
+      transparan** (lihat bagian "Bikin Filter Sendiri" di bawah). Filter
+      "Normal" bawaan tidak bisa dihapus, 3 contoh (`Kemerdekaan`,
+      `Ramadan`, `Ceria`) otomatis tersedia begitu pertama kali dibuka -
+      boleh dihapus/diganti kapan saja.
+
+## Bikin Filter Sendiri (mis. tema Kemerdekaan/Ramadan versi sendiri)
+
+Filter = **1 file PNG** dengan latar **transparan** (alpha channel),
+ukurannya bebas (otomatis di-resize mengikuti ukuran preview kamera saat
+dipakai). Bagian yang transparan akan tembus pandang (kelihatan wajah
+asli), bagian yang tidak transparan (mis. border, stiker, ucapan) akan
+menimpa penuh di atas gambar kamera.
+
+Cara bikin (pakai editor gambar apa saja yang bisa export PNG transparan -
+Photoshop, GIMP, Canva, Figma, dll):
+1. Buat kanvas baru, **JANGAN diisi background** (biarkan transparan).
+2. Gambar/tempel elemen dekoratif di PINGGIR kanvas (border, logo, pita,
+   confetti, dsb) - HINDARI menutupi bagian TENGAH karena di situlah wajah
+   orang akan muncul saat presensi.
+3. Export/Save As **PNG** (bukan JPG - JPG tidak punya transparansi).
+4. Buka aplikasi Presensi > "Kelola Filter..." > "Upload Filter (.png)..."
+   > pilih file tadi. Nama file (tanpa `.png`) jadi nama filter yang
+   muncul di dropdown.
+
+Lihat `Assets/SampleFilters/*.png` di repo ini sbg contoh nyata (dibuat
+sendiri via script Python+Pillow, bukan diunduh dari internet - supaya
+jelas asalnya & bebas lisensi untuk dipakai/dimodifikasi sekolah).
 
 ## Konfigurasi (WAJIB sebelum dipakai di PC sekolah)
 
@@ -53,7 +86,6 @@ dicoba tanpa token dulu.
 ## Yang BELUM (sengaja, lihat komentar di kode)
 
 - Belum ada installer/auto-updater (Velopack) - baru `dotnet publish` polos.
-- Belum ada ikon aplikasi (`ApplicationIcon` sengaja dikosongkan di `.csproj`).
 - Belum ada UI pemilihan kamera/COM-port yang proper (masih ambil device
   pertama yang ketemu).
 

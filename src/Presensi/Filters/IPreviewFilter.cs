@@ -12,5 +12,12 @@ namespace Presensi.Filters;
 public interface IPreviewFilter
 {
     string DisplayName { get; }
+
+    /// <summary>False HANYA utk filter "Normal" (default, tidak bisa dihapus user).</summary>
+    bool IsDeletable { get; }
+
+    /// <summary>Path file PNG di disk kalau filter ini berbasis gambar upload user, null kalau bawaan (mis. Normal).</summary>
+    string? FilePath { get; }
+
     void Apply(Mat previewFrame);
 }
