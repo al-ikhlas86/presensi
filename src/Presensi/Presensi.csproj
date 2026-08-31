@@ -5,9 +5,10 @@
       Multi-target SENGAJA (2026-08-31, keputusan user): net48 utk PC
       Windows 7 SP1 ke atas yang masih dipakai sekolah, net8.0-windows
       utk PC Windows 10/11 modern - SATU codebase, SATU repo, CI build
-      MENGHASILKAN 2 installer terpisah tiap kali rilis. Jangan pisah jadi
-      2 project/repo - nyaris seluruh kode (UI, logic kamera/scanner)
-      sama persis, cuma target runtime yang beda.
+      MENGHASILKAN 2 file zip auto-update terpisah tiap kali rilis (lihat
+      build.yml + App.xaml.cs, tidak pakai installer sama sekali). Jangan
+      pisah jadi 2 project/repo - nyaris seluruh kode (UI, logic
+      kamera/scanner) sama persis, cuma target runtime yang beda.
     -->
     <TargetFrameworks>net48;net8.0-windows</TargetFrameworks>
     <OutputType>WinExe</OutputType>
@@ -43,6 +44,11 @@
     <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
     <PackageReference Include="OpenCvSharp4.WpfExtensions" Version="4.10.0.20241108" />
+    <!-- Auto-update: app cek manifest XML (dipublish CI ke GitHub Release
+         tiap tag) & self-update tanpa campur tangan manual - lihat
+         App.xaml.cs & .github/workflows/build.yml. Mendukung KEDUA target
+         (net45+ dan net5.0-windows+), jadi 1 baris ini cukup utk semua. -->
+    <PackageReference Include="AutoUpdater.NET.Official" Version="1.9.3" />
   </ItemGroup>
 
   <ItemGroup>

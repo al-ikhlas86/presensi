@@ -1,14 +1,25 @@
 name: Build Presensi
 
-# Manual SAJA (workflow_dispatch) - SENGAJA tidak jalan otomatis tiap push
-# (keputusan eksplisit user 2026-08-31: commit/push sehari-hari boleh
-# sesering apa pun tanpa memicu compile, baru jalankan build kalau memang
-# sudah dinyatakan siap). Compile 100% di server GitHub sendiri (runner
-# windows-latest) - TIDAK menyentuh VPS Oracle sama sekali, TIDAK melanggar
-# aturan Oracle Cloud Free Tier (2 hal itu benar-benar infrastruktur
-# terpisah).
+# Compile TETAP tidak jalan tiap commit/push biasa (keputusan eksplisit user
+# 2026-08-31, tidak diubah) - baru jalan otomatis kalau push GIT TAG berawalan
+# "v" (mis. v1.4.0), yang berarti "versi ini siap dirilis ke kiosk sekolah".
+# workflow_dispatch tetap ada utk build uji manual tanpa bikin Release/tag.
+#
+# Alur rilis: build (compile 2 target, zip masing2 hasilnya) -> release (bikin
+# GitHub Release + manifest XML yang dibaca AutoUpdater.NET di app) -> kiosk
+# yang sudah terpasang otomatis unduh+pasang sendiri versi baru, TANPA
+# installer & TANPA sentuhan manual apa pun di PC manapun. Lihat App.xaml.cs
+# utk separuh lain dari mekanisme ini (AutoUpdater.Start + kenapa
+# ClearAppDirectory sengaja false - appsettings.json per-kiosk tidak boleh
+# ikut terhapus tiap update).
 on:
+  push:
+    tags:
+      - "v*"
   workflow_dispatch: {}
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -22,6 +33,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Tentukan nomor versi dari tag git
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $v = $env:GITHUB_REF -replace 'refs/tags/v', ''
+          } else {
+            # workflow_dispatch manual (bukan rilis resmi) - versi placeholder,
+            # TIDAK dipublish sbg update krn langkah zip/release di bawah
+            # cuma jalan utk push tag (lihat kondisi if masing2 step).
+            $v = "0.0.0-dev"
+          }
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
       - name: Setup .NET 8 SDK
         uses: actions/setup-dotnet@v4
         with:
@@ -32,15 +57,91 @@ jobs:
 
       - name: Publish (net48)
         if: matrix.target == 'net48'
-        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net48 -o publish/net48
+        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net48 -o publish/net48 -p:Version=${{ steps.version.outputs.version }}
 
       - name: Publish (net8.0-windows, self-contained win-x64)
         if: matrix.target == 'net8.0-windows'
-        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net8.0-windows -r win-x64 --self-contained true -p:PublishReadyToRun=false -o publish/net8.0-windows
+        run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net8.0-windows -r win-x64 --self-contained true -p:PublishReadyToRun=false -p:Version=${{ steps.version.outputs.version }} -o publish/net8.0-windows
 
-      - name: Upload artifact
+      - name: Upload artifact (folder mentah, tetap disimpan utk debug manual)
         uses: actions/upload-artifact@v4
         with:
           name: Presensi-${{ matrix.target }}
           path: publish/${{ matrix.target }}
           retention-days: 30
+
+      # Langkah di bawah ini (zip + upload utk Release) SENGAJA cuma jalan
+      # kalau dipicu tag - build manual (workflow_dispatch) berhenti di
+      # artifact folder mentah di atas, tidak ikut terbit sbg Release.
+      - name: Bikin zip hasil publish (dibaca AutoUpdater.NET di app)
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $target = "${{ matrix.target }}"
+          $suffix = if ($target -eq 'net48') { 'net48' } else { 'net8' }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "publish\$target\*" -DestinationPath "dist\Presensi-$suffix.zip" -Force
+
+      - name: Upload zip (utk dipublish job release)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Presensi-Zip-${{ matrix.target }}
+          path: dist/*.zip
+          retention-days: 90
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Tentukan nomor versi dari tag git
+        id: version
+        shell: pwsh
+        run: |
+          $v = "$env:GITHUB_REF" -replace 'refs/tags/v', ''
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: Presensi-Zip-net48
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: Presensi-Zip-net8.0-windows
+          path: dist
+
+      - name: Buat manifest update-*.xml (dibaca AutoUpdater.NET di app)
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $tag = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $changelog = "https://github.com/$repo/releases/tag/$tag"
+
+          function New-Manifest($suffix, $zipName) {
+            $url = "https://github.com/$repo/releases/download/$tag/$zipName"
+            $xml = @"
+          <item>
+            <version>$version</version>
+            <url>$url</url>
+            <changelog>$changelog</changelog>
+            <mandatory>false</mandatory>
+          </item>
+          "@
+            Set-Content -Path "dist\update-$suffix.xml" -Value $xml -Encoding UTF8
+          }
+
+          New-Manifest -suffix "net48" -zipName "Presensi-net48.zip"
+          New-Manifest -suffix "net8" -zipName "Presensi-net8.zip"
+
+      - name: Terbitkan GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Presensi ${{ github.ref_name }}"
+          generate_release_notes: true
+          files: |
+            dist/*.zip
+            dist/*.xml
