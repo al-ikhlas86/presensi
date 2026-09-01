@@ -43,6 +43,18 @@
                     <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Background="#CC000000" Padding="16,12">
                         <TextBlock x:Name="StatusText" Text="Menunggu wajah / scan kartu..." Foreground="White" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
                     </Border>
+                    <!-- Banner update - MUNCUL cuma saat auto-update sedang
+                         mengunduh/memasang (lihat UpdateService.StatusChanged
+                         di code-behind). Ditambahkan 2026-09-01 - SEBELUM ini
+                         TIDAK ADA tanda visual apa pun kalau app sedang
+                         mengunduh update (~100MB, tidak instan), jadi user
+                         berkali-kali menutup app di tengah unduhan mengira
+                         "tidak terjadi apa-apa" - unduhan hangus tiap kali. -->
+                    <Border x:Name="UpdateBanner" VerticalAlignment="Top" HorizontalAlignment="Stretch"
+                            Background="#E6B45309" Padding="16,12" Visibility="Collapsed">
+                        <TextBlock x:Name="UpdateBannerText" Foreground="White" FontSize="15" FontWeight="Bold"
+                                   HorizontalAlignment="Center" TextWrapping="Wrap" />
+                    </Border>
                 </Grid>
             </Border>
 

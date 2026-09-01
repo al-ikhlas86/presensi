@@ -82,6 +82,24 @@ public partial class MainWindow : Window
 
         RiwayatList.ItemsSource = _riwayatPresensi;
 
+        // Banner "jangan tutup aplikasi" saat auto-update sedang mengunduh/
+        // memasang (diminta tersirat user 2026-09-01 - berkali-kali menutup
+        // app di tengah unduhan krn tidak ada tanda visual sama sekali
+        // sebelumnya). UpdateService jalan di background thread, jadi
+        // Dispatcher.Invoke WAJIB sebelum menyentuh elemen UI.
+        Services.UpdateService.StatusChanged += (msg) => Dispatcher.Invoke(() =>
+        {
+            if (string.IsNullOrEmpty(msg))
+            {
+                UpdateBanner.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                UpdateBannerText.Text = msg;
+                UpdateBanner.Visibility = Visibility.Visible;
+            }
+        });
+
         _camera.PreviewFrameCaptured += OnPreviewFrameCaptured;
         _camera.RawFrameCaptured += OnRawFrameCaptured;
         _camera.CameraError += (_, msg) => Dispatcher.Invoke(() => StatusText.Text = "Kamera bermasalah: " + msg);

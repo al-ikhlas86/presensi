@@ -27,6 +27,14 @@ namespace Presensi.Services;
 /// </summary>
 public static class UpdateService
 {
+    // Diamati MainWindow utk tampilkan banner "jangan tutup aplikasi" -
+    // ditambahkan 2026-09-01 setelah user berkali-kali menutup app di
+    // tengah unduhan (114MB tidak instan, TIDAK ADA tanda visual apa pun
+    // sebelumnya kalau app sedang mengunduh update, jadi wajar dikira
+    // "tidak terjadi apa-apa" lalu ditutup - unduhan hangus, mulai dari nol
+    // lagi tiap dicoba). Null/kosong = sembunyikan banner.
+    public static event Action<string?>? StatusChanged;
+
 #if NET48
     private const string AssetName = "Presensi-net48.zip";
 #else
@@ -74,11 +82,13 @@ public static class UpdateService
             }
 
             long assetId = 0;
+            long assetSize = 0;
             foreach (var asset in doc.RootElement.GetProperty("assets").EnumerateArray())
             {
                 if (asset.GetProperty("name").GetString() == AssetName)
                 {
                     assetId = asset.GetProperty("id").GetInt64();
+                    assetSize = asset.TryGetProperty("size", out var sizeProp) ? sizeProp.GetInt64() : 0;
                     break;
                 }
             }
@@ -89,6 +99,9 @@ public static class UpdateService
             }
 
             Log.Info($"[Update] Update ditemukan: {installed} -> {remote}. Mengunduh asset id={assetId}...");
+            var sizeMb = assetSize > 0 ? $"{assetSize / 1024.0 / 1024.0:F0} MB" : "ukuran tidak diketahui";
+            StatusChanged?.Invoke($"Memperbarui ke versi {remote} ({sizeMb}) - JANGAN TUTUP APLIKASI INI sampai selesai...");
+
             using var assetReq = new HttpRequestMessage(HttpMethod.Get, string.Format(ApiAssetUrlTemplate, assetId));
             // Accept ini WAJIB - tanpa ini GitHub API balikin metadata JSON
             // asset-nya, BUKAN isi filenya.
@@ -97,15 +110,19 @@ public static class UpdateService
             assetResp.EnsureSuccessStatusCode();
             var zipBytes = await assetResp.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             Log.Info($"[Update] Unduhan selesai ({zipBytes.Length:N0} bytes). Menyiapkan pemasangan...");
+            StatusChanged?.Invoke("Update selesai diunduh - aplikasi akan tertutup sebentar lalu terbuka lagi otomatis...");
 
             ApplyAndRestart(zipBytes);
         }
         catch (Exception ex)
         {
             // Gagal cek/unduh update (mis. sekolah lagi tidak ada internet,
-            // atau token GithubToken keliru/kedaluwarsa) TIDAK BOLEH
-            // mengganggu fungsi utama kiosk - dicatat, dicoba lagi otomatis
-            // di siklus berikutnya (lihat App.xaml.cs).
+            // atau token GithubToken keliru/kedaluwarsa, ATAU aplikasi
+            // ditutup paksa di tengah unduhan) TIDAK BOLEH mengganggu fungsi
+            // utama kiosk - dicatat, dicoba lagi otomatis di siklus
+            // berikutnya (lihat App.xaml.cs). Banner disembunyikan lagi -
+            // JANGAN dibiarkan nyangkut "sedang mengunduh" kalau ternyata gagal.
+            StatusChanged?.Invoke(null);
             Log.Error("[Update] Gagal cek/unduh update (diabaikan, aplikasi tetap jalan seperti biasa)", ex);
         }
     }
