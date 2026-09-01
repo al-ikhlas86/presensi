@@ -24,19 +24,27 @@ public static class FilterManager
         try
         {
             Directory.CreateDirectory(FiltersDir);
-            if (Directory.EnumerateFiles(FiltersDir).Any(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant()))) return;
-
-            // Contoh filter bawaan (original, dibuat sendiri - lihat
-            // README/Projek.md soal kenapa bukan diunduh dari internet)
-            // disalin sekali di first-run supaya user langsung punya
-            // sesuatu utk dicoba tanpa perlu upload dulu.
             var sampleDir = Path.Combine(AppContext.BaseDirectory, "SampleFilters");
             if (!Directory.Exists(sampleDir)) return;
 
+            // SELALU ditimpa tiap startup - BUKAN cuma sekali saat folder
+            // kosong spt versi lama. Itu bug nyata yang ditemukan user
+            // 2026-09-01: stiker bawaan yang sudah dirombak (Astronot dkk)
+            // TIDAK PERNAH sampai ke PC yang sudah pernah dipakai sebelumnya,
+            // krn folder filter PC itu sudah terisi sejak first-run lama dan
+            // "if sudah ada isi, lewati" membuat update stiker bawaan macet
+            // selamanya di situ. Cuma file dgn NAMA PERSIS SAMA dgn contoh
+            // bawaan yang ditimpa - filter lain yang user upload/rename
+            // sendiri TIDAK disentuh. Trade-off yang disadari: kalau user
+            // mengedit LANGSUNG salah satu contoh bawaan tanpa ganti nama
+            // filenya, editannya ikut tertimpa lagi di update berikutnya -
+            // README sudah bilang 3 contoh ini "boleh dihapus/diganti kapan
+            // saja", jadi utk kustomisasi permanen disarankan hapus+upload
+            // ulang dgn nama baru, bukan edit di tempat.
             foreach (var file in Directory.EnumerateFiles(sampleDir).Where(f => SupportedExtensions.Contains(Path.GetExtension(f).ToLowerInvariant())))
             {
                 var dest = Path.Combine(FiltersDir, Path.GetFileName(file));
-                if (!File.Exists(dest)) File.Copy(file, dest);
+                File.Copy(file, dest, overwrite: true);
             }
         }
         catch (Exception ex)

@@ -46,29 +46,25 @@
                 </Grid>
             </Border>
 
-            <!-- Controls - dibungkus Grid 2 kolom (BUKAN 2 StackPanel di dalam
-                 DockPanel spt sebelumnya) supaya kiri & kanan py jatah lebar
-                 SENDIRI-SENDIRI yang jelas, tidak saling menimpa saat jendela
-                 dikecilkan (dilaporkan user 2026-09-01) - MinWidth Window di
-                 atas jadi jaring pengaman terakhir, tapi tata letak ini sendiri
-                 sudah tidak overlap dalam rentang MinWidth itu. -->
-            <Grid Grid.Row="2" Margin="0,12,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal">
-                    <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <ComboBox x:Name="FilterCombo" Width="160" SelectionChanged="FilterCombo_SelectionChanged" />
-                    <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Padding="12,8" Margin="8,0,0,0" Click="ManageFilterButton_Click" />
-                    <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="8,0,0,0" Click="SettingsButton_Click" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="8,0,0,0" Click="ToggleRiwayatButton_Click" />
-                    <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="8,0,0,0" Click="TogglePreviewButton_Click" />
-                    <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="8,0,0,0" Click="ScannerButton_Click" />
-                </StackPanel>
-            </Grid>
+            <!-- Controls - WrapPanel TUNGGAL (BUKAN Grid 2 kolom spt percobaan
+                 sebelumnya) - perbaikan Grid-2-kolom TERBUKTI MASIH terpotong
+                 begitu tombol ke-6 (Sembunyikan Panel) ditambahkan, krn kolom
+                 "*" cuma dapat SISA lebar setelah kolom "Auto" diambil duluan,
+                 dan WPF MEMOTONG (bukan membungkus) konten yang melebihi jatah
+                 kolomnya (dilaporkan user 2026-09-01, screenshot: "Kelola
+                 Filter..." kepotong jadi "K", "Pengaturan..." hilang total).
+                 WrapPanel TIDAK PERNAH memotong - kalau tidak muat 1 baris,
+                 tombol otomatis lanjut ke baris berikutnya, apa pun jumlah
+                 tombolnya & seberapa pun sempit jendelanya. -->
+            <WrapPanel Grid.Row="2" Margin="0,12,0,0" Orientation="Horizontal">
+                <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <ComboBox x:Name="FilterCombo" Width="160" Margin="0,0,8,8" SelectionChanged="FilterCombo_SelectionChanged" />
+                <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Padding="12,8" Margin="0,0,8,8" Click="ManageFilterButton_Click" />
+                <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="0,0,8,8" Click="SettingsButton_Click" />
+                <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="0,0,8,8" Click="ToggleRiwayatButton_Click" />
+                <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="0,0,8,8" Click="TogglePreviewButton_Click" />
+                <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="0,0,8,8" Click="ScannerButton_Click" />
+            </WrapPanel>
         </Grid>
 
         <!-- Panel riwayat presensi - opsional (bisa dimatikan lewat Pengaturan,

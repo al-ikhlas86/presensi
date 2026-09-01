@@ -1,7 +1,13 @@
 <Application x:Class="Presensi.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="MainWindow.xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- StartupUri SENGAJA dihapus (2026-09-01) - MainWindow sekarang dibuat
+         manual di App.xaml.cs, HANYA setelah cek Mutex 1-instance lolos.
+         Terbukti nyata via pengujian langsung: dgn StartupUri, instance
+         KEDUA yang gagal dapat Mutex tetap sempat membuat MainWindow &
+         MENYALAKAN KAMERA sesaat sebelum Shutdown() benar2 berefek (WPF
+         memproses pembuatan window StartupUri terlepas dari urutan kode di
+         OnStartup) - bukan penutupan bersih spt yang diharapkan. -->
     <Application.Resources>
     </Application.Resources>
 </Application>
