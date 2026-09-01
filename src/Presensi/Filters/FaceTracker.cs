@@ -3,6 +3,11 @@ using System.Linq;
 using DlibDotNet;
 using OpenCvSharp;
 using Presensi.Logging;
+// DlibDotNet & OpenCvSharp SAMA-SAMA punya tipe "Point" - dipakai bersamaan
+// di file ini (landmark dari Dlib, hasil akhir dalam koordinat OpenCvSharp
+// utk dipakai FaceStickerFilter), jadi hasil landmark WAJIB dialiaskan
+// eksplisit ke OpenCvSharp.Point.
+using CvPoint = OpenCvSharp.Point;
 
 namespace Presensi.Filters;
 
@@ -24,6 +29,11 @@ namespace Presensi.Filters;
 /// encode/decode file PNG (Cv2.ImWrite + Dlib.LoadImage) - LEBIH LAMBAT
 /// sedikit tapi PASTI BENAR krn lewat 2 codec yang sudah teruji matang,
 /// tidak menebak-nebak layout memori mentah lagi.
+///
+/// 2026-09-01: 1 siklus deteksi SEKARANG opsional sekalian ambil 68 titik
+/// landmark wajah (net8.0-windows saja, lihat LandmarkModelService) di ATAS
+/// kotak wajah yang sudah terdeteksi - BUKAN 2 pintu/siklus terpisah, supaya
+/// tetap 1x throttle & 1x baca file temp yang sama utk keduanya.
 /// </summary>
 internal static class FaceTracker
 {
@@ -33,17 +43,38 @@ internal static class FaceTracker
     private static readonly string TempImagePath = Path.Combine(Path.GetTempPath(), "presensi_face_detect.png");
 
     private static Rect? _lastBox;
+#if !NET48
+    private static CvPoint[]? _lastLandmarks;
+#endif
     private static DateTime _lastDetectAt = DateTime.MinValue;
 
     /// <summary>Null kalau tidak ada wajah terdeteksi (belum ada orang di depan kamera / hasil cache terakhir juga kosong).</summary>
     public static Rect? GetFaceBox(Mat previewFrame)
     {
+        DetectIfNeeded(previewFrame);
+        return _lastBox;
+    }
+
+#if !NET48
+    /// <summary>
+    /// 68 titik wajah urutan standar dlib (0-16 garis rahang, 17-26 alis,
+    /// 27-35 hidung, 36-41 mata kanan subjek, 42-47 mata kiri subjek, 48-67
+    /// mulut) - null kalau model belum siap (LandmarkModelService.Predictor
+    /// masih null, lihat MainWindow.xaml.cs pemanggilan EnsureLoadedAsync)
+    /// ATAU tidak ada wajah terdeteksi.
+    /// </summary>
+    public static CvPoint[]? GetFaceLandmarks(Mat previewFrame)
+    {
+        DetectIfNeeded(previewFrame);
+        return _lastLandmarks;
+    }
+#endif
+
+    private static void DetectIfNeeded(Mat previewFrame)
+    {
         lock (Gate)
         {
-            if (DateTime.UtcNow - _lastDetectAt < DetectInterval)
-            {
-                return _lastBox;
-            }
+            if (DateTime.UtcNow - _lastDetectAt < DetectInterval) return;
             _lastDetectAt = DateTime.UtcNow;
 
             try
@@ -54,7 +85,10 @@ internal static class FaceTracker
                 if (faces.Length == 0)
                 {
                     _lastBox = null;
-                    return null;
+#if !NET48
+                    _lastLandmarks = null;
+#endif
+                    return;
                 }
 
                 // Kiosk presensi cuma 1 orang di depan kamera pada satu waktu -
@@ -62,13 +96,30 @@ internal static class FaceTracker
                 // prioritaskan yang PALING BESAR (paling dekat kamera).
                 var best = faces.OrderByDescending(r => (long) r.Width * r.Height).First();
                 _lastBox = new Rect(best.Left, best.Top, (int) best.Width, (int) best.Height);
-                return _lastBox;
+
+#if !NET48
+                _lastLandmarks = null;
+                var predictor = LandmarkModelService.Predictor;
+                if (predictor is not null)
+                {
+                    using var shape = predictor.Detect(dlibImage, best);
+                    var points = new CvPoint[shape.Parts];
+                    for (uint i = 0; i < shape.Parts; i++)
+                    {
+                        var p = shape.GetPart(i);
+                        points[i] = new CvPoint(p.X, p.Y);
+                    }
+                    _lastLandmarks = points;
+                }
+#endif
             }
             catch (Exception ex)
             {
                 Log.Error("Gagal deteksi wajah utk filter stiker", ex);
                 _lastBox = null;
-                return null;
+#if !NET48
+                _lastLandmarks = null;
+#endif
             }
         }
     }

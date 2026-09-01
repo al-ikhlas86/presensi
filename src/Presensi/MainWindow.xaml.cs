@@ -73,6 +73,16 @@ public partial class MainWindow : Window
         ApplyDisplayMode();
         ApplyRiwayatPanelVisibility();
 
+#if !NET48
+        // Mulai siapkan model landmark wajah di BACKGROUND sedini mungkin
+        // (bukan ditunda sampai user pertama kali pakai filter stiker) -
+        // supaya kalau memang perlu diunduh (~64MB, sekali per-PC), sudah
+        // selesai/lagi jalan duluan sebelum benar2 dibutuhkan. Gagal di sini
+        // (mis. tidak ada internet) TIDAK mengganggu apa pun - lihat
+        // LandmarkModelService, filter otomatis fallback ke mode kotak biasa.
+        _ = Filters.LandmarkModelService.EnsureLoadedAsync();
+#endif
+
         FilterManager.EnsureSeeded();
         ReloadFilters();
 

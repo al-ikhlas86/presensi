@@ -77,6 +77,15 @@
     </None>
   </ItemGroup>
 
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <!-- SharpCompress - satu-satunya kebutuhan baru utk LandmarkModelService.cs
+         (dekompresi .bz2, format asli model landmark wajah dlib - .NET/BCL
+         tidak punya decoder bzip2 bawaan). KHUSUS net8.0-windows krn fitur
+         filter presisi ini memang cuma utk Windows tingkat atas (diminta
+         user 2026-09-01) - net48/Windows 7 tidak butuh paket ini sama sekali. -->
+    <PackageReference Include="SharpCompress" Version="1.0.0" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <!-- Reference assemblies net48 LENGKAP dari NuGet (bukan andalkan yang
          kebetulan terpasang di mesin/CI) - build jadi 100% reproducible,
