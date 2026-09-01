@@ -63,7 +63,14 @@ jobs:
         if: matrix.target == 'net8.0-windows'
         run: dotnet publish src/Presensi/Presensi.csproj -c Release -f net8.0-windows -r win-x64 --self-contained true -p:PublishReadyToRun=false -p:Version=${{ steps.version.outputs.version }} -o publish/net8.0-windows
 
-      - name: Upload artifact (folder mentah, tetap disimpan utk debug manual)
+      # Folder mentah ini SENGAJA cuma diupload utk build manual
+      # (workflow_dispatch, dipakai developer debug) - dulu diupload SELALU
+      # termasuk saat rilis bertag, hasilnya halaman Actions rilis resmi
+      # menampilkan 4 artifact sekaligus (2 mentah + 2 zip) dan bikin bingung
+      # "download yang mana" (dilaporkan user 2026-09-01). Rilis bertag
+      # sekarang cuma tampilkan yang relevan (zip, diteruskan ke Releases).
+      - name: Upload artifact (folder mentah, dipakai debug manual)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: Presensi-${{ matrix.target }}
