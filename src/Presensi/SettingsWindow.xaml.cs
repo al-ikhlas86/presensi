@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
         var match = DisplayModeCombo.Items.Cast<ComboBoxItem>()
             .FirstOrDefault(i => (string) i.Tag == config.DisplayMode);
         DisplayModeCombo.SelectedItem = match ?? DisplayModeCombo.Items[0];
+        ShowRiwayatPanelCheck.IsChecked = config.ShowRiwayatPanel;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -39,6 +40,7 @@ public partial class SettingsWindow : Window
         Config.JamMasuk = JamMasukBox.Text.Trim();
         Config.JamPulang = JamPulangBox.Text.Trim();
         Config.DisplayMode = (string) ((ComboBoxItem) DisplayModeCombo.SelectedItem).Tag;
+        Config.ShowRiwayatPanel = ShowRiwayatPanelCheck.IsChecked == true;
         AppConfig.Save(Config);
         Saved = true;
         DialogResult = true;

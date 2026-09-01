@@ -28,12 +28,15 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
 
         // Lihat UpdateService.cs utk alasan ini ditulis sendiri (bukan lagi
-        // AutoUpdater.NET.Official) - dijalankan di background thread (Task.Run),
-        // BUKAN langsung di UI thread, krn ada unduhan file besar (build
-        // self-contained net8.0-windows ~100MB+) yang tidak boleh membekukan
-        // tampilan kiosk selama proses cek/unduh berlangsung.
-        _ = System.Threading.Tasks.Task.Run(UpdateService.CheckAndApplyAsync);
-        _updateTimer.Tick += (_, _) => _ = System.Threading.Tasks.Task.Run(UpdateService.CheckAndApplyAsync);
+        // AutoUpdater.NET.Official) & kenapa lewat GitHub API (bukan URL
+        // publik biasa - repo ini privat). AppConfig.Load() dibaca ulang tiap
+        // siklus (bukan cache 1x) supaya GithubToken yang baru diisi/diganti
+        // manual di appsettings.json langsung kepakai tanpa restart app.
+        // Dijalankan di background thread (Task.Run), BUKAN langsung di UI
+        // thread, krn ada unduhan file besar (~100MB+) yang tidak boleh
+        // membekukan tampilan kiosk selama proses cek/unduh berlangsung.
+        _ = System.Threading.Tasks.Task.Run(() => UpdateService.CheckAndApplyAsync(AppConfig.Load()));
+        _updateTimer.Tick += (_, _) => _ = System.Threading.Tasks.Task.Run(() => UpdateService.CheckAndApplyAsync(AppConfig.Load()));
         _updateTimer.Start();
     }
 

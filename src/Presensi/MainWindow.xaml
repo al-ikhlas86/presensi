@@ -4,14 +4,15 @@
         Title="Presensi - Al-Ikhlas 86"
         Icon="Assets/app.ico"
         Height="720" Width="1024"
+        MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen"
         Background="#1A1D1F"
         Closing="Window_Closing">
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="16" />
-            <ColumnDefinition Width="300" />
+            <ColumnDefinition x:Name="RiwayatSpacerColumn" Width="16" />
+            <ColumnDefinition x:Name="RiwayatPanelColumn" Width="300" />
         </Grid.ColumnDefinitions>
 
         <Grid Grid.Column="0">
@@ -45,25 +46,36 @@
                 </Grid>
             </Border>
 
-            <!-- Controls -->
-            <DockPanel Grid.Row="2" Margin="0,12,0,0">
-                <StackPanel Orientation="Horizontal">
+            <!-- Controls - dibungkus Grid 2 kolom (BUKAN 2 StackPanel di dalam
+                 DockPanel spt sebelumnya) supaya kiri & kanan py jatah lebar
+                 SENDIRI-SENDIRI yang jelas, tidak saling menimpa saat jendela
+                 dikecilkan (dilaporkan user 2026-09-01) - MinWidth Window di
+                 atas jadi jaring pengaman terakhir, tapi tata letak ini sendiri
+                 sudah tidak overlap dalam rentang MinWidth itu. -->
+            <Grid Grid.Row="2" Margin="0,12,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <ComboBox x:Name="FilterCombo" Width="180" SelectionChanged="FilterCombo_SelectionChanged" />
+                    <ComboBox x:Name="FilterCombo" Width="160" SelectionChanged="FilterCombo_SelectionChanged" />
                     <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Padding="12,8" Margin="8,0,0,0" Click="ManageFilterButton_Click" />
                     <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="8,0,0,0" Click="SettingsButton_Click" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="0,0,8,0" Click="TogglePreviewButton_Click" />
-                    <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Click="ScannerButton_Click" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="8,0,0,0" Click="TogglePreviewButton_Click" />
+                    <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="8,0,0,0" Click="ScannerButton_Click" />
                 </StackPanel>
-            </DockPanel>
+            </Grid>
         </Grid>
 
-        <!-- Panel riwayat presensi - diminta user 2026-09-01, tampil live tiap
-             ada presensi berhasil (wajah MAUPUN scanner), bukan cuma scanner,
-             krn keduanya sama-sama lewat HandleAttendanceResult satu pintu. -->
-        <Border Grid.Column="2" Background="#232629" CornerRadius="12" Padding="16">
+        <!-- Panel riwayat presensi - opsional (bisa dimatikan lewat Pengaturan,
+             lihat ApplyRiwayatPanelVisibility di code-behind), diminta user
+             2026-09-01. Tampil live tiap ada presensi berhasil (wajah MAUPUN
+             scanner), krn keduanya sama-sama lewat HandleAttendanceResult
+             satu pintu. -->
+        <Border x:Name="RiwayatPanelBorder" Grid.Column="2" Background="#232629" CornerRadius="12" Padding="16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />

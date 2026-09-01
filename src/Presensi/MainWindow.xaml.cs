@@ -59,6 +59,11 @@ public partial class MainWindow : Window
     private DateTime _cooldownUntil = DateTime.MinValue;
     private int _busyFlag; // 0/1, dijaga Interlocked - cegah tumpang-tindih panggilan API
 
+    // Dipakai TambahRiwayat menahan duplikat beruntun (lihat catatan di sana).
+    private string? _lastRiwayatKey;
+    private DateTime _lastRiwayatAt = DateTime.MinValue;
+    private static readonly TimeSpan RiwayatDedupWindow = TimeSpan.FromSeconds(30);
+
     public MainWindow()
     {
         InitializeComponent();
@@ -66,6 +71,7 @@ public partial class MainWindow : Window
         _config = AppConfig.Load();
         _api = BuildApiClient(_config);
         ApplyDisplayMode();
+        ApplyRiwayatPanelVisibility();
 
         FilterManager.EnsureSeeded();
         ReloadFilters();
@@ -109,6 +115,18 @@ public partial class MainWindow : Window
     {
         switch (_config.DisplayMode)
         {
+            case "default":
+                // Ukuran baku 1024x720 (sama dgn nilai awal di MainWindow.xaml
+                // sebelum fitur mode tampilan ini ada) - tetap bisa diubah
+                // manual sesudahnya, beda dari "bebas" yang TIDAK menyentuh
+                // ukuran sama sekali (mempertahankan posisi/ukuran terakhir).
+                WindowStyle = WindowStyle.SingleBorderWindow;
+                ResizeMode = ResizeMode.CanResize;
+                WindowState = WindowState.Normal;
+                Width = 1024;
+                Height = 720;
+                WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                break;
             case "fullscreen":
                 WindowStyle = WindowStyle.None;
                 ResizeMode = ResizeMode.NoResize;
@@ -123,11 +141,32 @@ public partial class MainWindow : Window
             case "1:1":
                 SetWindowedAspect(1.0);
                 break;
-            default: // "bebas" - bawaan lama, jendela bisa diubah bebas
+            default: // "bebas" - ukuran/posisi TIDAK disentuh, bisa diubah manual
                 WindowStyle = WindowStyle.SingleBorderWindow;
                 ResizeMode = ResizeMode.CanResize;
                 WindowState = WindowState.Normal;
                 break;
+        }
+    }
+
+    // Panel "Presensi Terbaru" opsional (diminta user 2026-09-01) - kolom
+    // spacer & panelnya sama2 dikecilkan ke 0 saat dimatikan, BUKAN cuma
+    // Visibility=Collapsed di Border-nya saja, supaya area preview kamera
+    // ikut melebar mengisi ruang yang dibebaskan, bukan menyisakan jarak
+    // kosong di kanan.
+    private void ApplyRiwayatPanelVisibility()
+    {
+        if (_config.ShowRiwayatPanel)
+        {
+            RiwayatSpacerColumn.Width = new GridLength(16);
+            RiwayatPanelColumn.Width = new GridLength(300);
+            RiwayatPanelBorder.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            RiwayatSpacerColumn.Width = new GridLength(0);
+            RiwayatPanelColumn.Width = new GridLength(0);
+            RiwayatPanelBorder.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -163,7 +202,24 @@ public partial class MainWindow : Window
     private void TambahRiwayat(string? nama, AttendanceMode mode)
     {
         if (string.IsNullOrWhiteSpace(nama)) return;
+
+        // _api Stub SELALU "berhasil" dgn nama palsu yang SAMA persis tiap ~3
+        // detik selama ada wajah di depan kamera (appsettings.json belum diisi
+        // KioskToken sungguhan) - itu murni artefak mode uji, bukan presensi
+        // sungguhan, jadi TIDAK dicatat ke panel (dilaporkan user "berisik",
+        // panel kena spam terus 2026-09-01).
+        if (_api is StubAttendanceApiClient) return;
+
         var jenis = mode == AttendanceMode.Masuk ? "masuk" : "pulang";
+        var key = nama + "|" + jenis;
+        // Jaga tambahan: tahan duplikat ORANG+JENIS yang SAMA kalau berulang
+        // dalam waktu singkat (mis. wajah masih di depan kamera pas cooldown
+        // habis) - presensi sungguhan seharusnya ditolak server ("sudah
+        // presensi hari ini") sebelum sampai sini, ini cuma jaring pengaman.
+        if (key == _lastRiwayatKey && DateTime.UtcNow - _lastRiwayatAt < RiwayatDedupWindow) return;
+        _lastRiwayatKey = key;
+        _lastRiwayatAt = DateTime.UtcNow;
+
         _riwayatPresensi.Insert(0, $"{nama} telah melakukan presensi {jenis} - {DateTime.Now:HH:mm:ss}");
         while (_riwayatPresensi.Count > MaxRiwayat) _riwayatPresensi.RemoveAt(_riwayatPresensi.Count - 1);
     }
@@ -215,6 +271,7 @@ public partial class MainWindow : Window
         {
             UpdateModeDisplay();
             ApplyDisplayMode();
+            ApplyRiwayatPanelVisibility();
         }
     }
 

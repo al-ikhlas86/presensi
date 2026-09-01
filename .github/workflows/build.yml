@@ -6,12 +6,13 @@ name: Build Presensi
 # workflow_dispatch tetap ada utk build uji manual tanpa bikin Release/tag.
 #
 # Alur rilis: build (compile 2 target, zip masing2 hasilnya) -> release (bikin
-# GitHub Release + manifest XML yang dibaca AutoUpdater.NET di app) -> kiosk
-# yang sudah terpasang otomatis unduh+pasang sendiri versi baru, TANPA
-# installer & TANPA sentuhan manual apa pun di PC manapun. Lihat App.xaml.cs
-# utk separuh lain dari mekanisme ini (AutoUpdater.Start + kenapa
-# ClearAppDirectory sengaja false - appsettings.json per-kiosk tidak boleh
-# ikut terhapus tiap update).
+# GitHub Release, tag jadi nomor versi) -> kiosk yang sudah terpasang otomatis
+# cek rilis terbaru lewat GitHub REST API (repo ini privat, lihat
+# UpdateService.cs utk alasannya) & pasang sendiri, TANPA installer & TANPA
+# sentuhan manual apa pun di PC manapun. Tidak ada manifest terpisah lagi -
+# app baca tag_name + daftar asset rilis langsung dari API, jadi nama asset
+# zip di sini (Presensi-net48.zip / Presensi-net8.zip) HARUS SAMA PERSIS dgn
+# AssetName di UpdateService.cs kalau mau diganti.
 on:
   push:
     tags:
@@ -80,7 +81,7 @@ jobs:
       # Langkah di bawah ini (zip + upload utk Release) SENGAJA cuma jalan
       # kalau dipicu tag - build manual (workflow_dispatch) berhenti di
       # artifact folder mentah di atas, tidak ikut terbit sbg Release.
-      - name: Bikin zip hasil publish (dibaca AutoUpdater.NET di app)
+      - name: Bikin zip hasil publish (diunduh app via GitHub API - UpdateService.cs)
         if: startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
@@ -104,13 +105,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Tentukan nomor versi dari tag git
-        id: version
-        shell: pwsh
-        run: |
-          $v = "$env:GITHUB_REF" -replace 'refs/tags/v', ''
-          echo "version=$v" >> $env:GITHUB_OUTPUT
-
       - uses: actions/download-artifact@v4
         with:
           name: Presensi-Zip-net48
@@ -120,35 +114,12 @@ jobs:
           name: Presensi-Zip-net8.0-windows
           path: dist
 
-      - name: Buat manifest update-*.xml (dibaca AutoUpdater.NET di app)
-        shell: pwsh
-        run: |
-          $version = "${{ steps.version.outputs.version }}"
-          $tag = "${{ github.ref_name }}"
-          $repo = "${{ github.repository }}"
-          $changelog = "https://github.com/$repo/releases/tag/$tag"
-
-          function New-Manifest($suffix, $zipName) {
-            $url = "https://github.com/$repo/releases/download/$tag/$zipName"
-            $xml = @"
-          <item>
-            <version>$version</version>
-            <url>$url</url>
-            <changelog>$changelog</changelog>
-            <mandatory>false</mandatory>
-          </item>
-          "@
-            Set-Content -Path "dist\update-$suffix.xml" -Value $xml -Encoding UTF8
-          }
-
-          New-Manifest -suffix "net48" -zipName "Presensi-net48.zip"
-          New-Manifest -suffix "net8" -zipName "Presensi-net8.zip"
-
+      # Tidak ada manifest XML lagi - UpdateService.cs di app baca tag_name +
+      # daftar asset rilis ini LANGSUNG lewat GitHub REST API (perlu token,
+      # krn repo privat), jadi cukup pastikan nama file zip di sini konsisten.
       - name: Terbitkan GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "Presensi ${{ github.ref_name }}"
           generate_release_notes: true
-          files: |
-            dist/*.zip
-            dist/*.xml
+          files: dist/*.zip

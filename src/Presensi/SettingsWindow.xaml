@@ -19,12 +19,15 @@
 
         <TextBlock Text="Mode Tampilan Jendela" Foreground="White" Margin="0,0,0,4" />
         <ComboBox x:Name="DisplayModeCombo" Padding="8" FontSize="14" Margin="0,0,0,16">
-            <ComboBoxItem Content="Bebas (bisa diubah manual)" Tag="bebas" />
+            <ComboBoxItem Content="Ukuran Default (1024x720)" Tag="default" />
+            <ComboBoxItem Content="Bebas (ukuran terakhir dipertahankan)" Tag="bebas" />
             <ComboBoxItem Content="Layar Penuh (Fullscreen)" Tag="fullscreen" />
             <ComboBoxItem Content="Jendela rasio 4:3" Tag="4:3" />
             <ComboBoxItem Content="Jendela rasio 16:9" Tag="16:9" />
             <ComboBoxItem Content="Jendela rasio 1:1 (persegi)" Tag="1:1" />
         </ComboBox>
+
+        <CheckBox x:Name="ShowRiwayatPanelCheck" Content="Tampilkan panel &quot;Presensi Terbaru&quot; di kanan" Foreground="White" Margin="0,0,0,16" />
 
         <TextBlock x:Name="ErrorText" Foreground="#F87171" Margin="0,0,0,8" Visibility="Collapsed" TextWrapping="Wrap" />
 

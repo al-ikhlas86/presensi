@@ -26,10 +26,11 @@ public sealed class AppConfig
     public string JamPulang { get; set; } = "15:00";
 
     /// <summary>
-    /// "bebas" (jendela bisa diubah bebas, bawaan lama) | "fullscreen" |
-    /// "4:3" | "16:9" | "1:1" (jendela rasio tetap, tidak resizable).
+    /// "default" (1024x720, bisa diubah) | "bebas" (ukuran/posisi terakhir
+    /// dipertahankan apa adanya, bawaan lama) | "fullscreen" | "4:3" | "16:9"
+    /// | "1:1" (jendela rasio tetap, tidak resizable).
     /// </summary>
-    public string DisplayMode { get; set; } = "bebas";
+    public string DisplayMode { get; set; } = "default";
 
     /// <summary>
     /// Port COM scanner terakhir yang berhasil tersambung - dipakai utk
@@ -37,6 +38,21 @@ public sealed class AppConfig
     /// "Sambungkan Scanner" manual tiap kali (diminta user 2026-09-01).
     /// </summary>
     public string? ScannerPort { get; set; }
+
+    /// <summary>
+    /// Panel "Presensi Terbaru" di kanan - opsional, bisa dimatikan (diminta
+    /// user 2026-09-01, PC dgn layar sempit mungkin tidak perlu panel ini).
+    /// </summary>
+    public bool ShowRiwayatPanel { get; set; } = true;
+
+    /// <summary>
+    /// Fine-grained Personal Access Token GitHub, scope Contents:Read-only
+    /// KHUSUS repo "presensi" - dipakai UpdateService.cs cek/unduh rilis
+    /// terbaru lewat REST API krn repo ini privat (URL publik "releases/
+    /// latest/download/..." SELALU 404 tanpa kredensial utk repo privat,
+    /// dibuktikan langsung 2026-09-01). Kosong = cek update dilewati diam2.
+    /// </summary>
+    public string? GithubToken { get; set; }
 
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
