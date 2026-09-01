@@ -79,6 +79,9 @@ public sealed class FaceStickerFilter : IPreviewFilter, IDisposable
         try
         {
             var box = faceBox.Value;
+#if !NET48
+            if (_manifest.SkinSmooth) ApplySkinSmooth(previewFrame, box);
+#endif
             // Skala SENGAJA TETAP dari kotak wajah apa adanya (bukan basis
             // landmark) - box.Width sudah teruji stabil, sedangkan skala
             // berbasis landmark (mis. lebar rahang) butuh WidthRatio ditata
@@ -148,6 +151,32 @@ public sealed class FaceStickerFilter : IPreviewFilter, IDisposable
         double sx = 0, sy = 0;
         foreach (var i in indices) { sx += points[i].X; sy += points[i].Y; }
         return new Point2f((float) (sx / indices.Length), (float) (sy / indices.Length));
+    }
+
+    // "Glow" kulit halus (diminta user 2026-09-01, "presisi & menghibur kaya
+    // Instagram/TikTok") - bilateral filter MENGHALUSKAN TEKSTUR kulit tanpa
+    // mengaburkan garis wajah/mata/mulut (beda dari blur/GaussianBlur biasa
+    // yang mengaburkan SEMUANYA rata) - teknik yang sama dipakai beauty
+    // filter komersial. Area diperbesar 15% dari kotak wajah supaya transisi
+    // ke dahi/leher tidak terlalu tajam. KHUSUS net8.0-windows (dipanggil
+    // hanya dari dalam #if !NET48 di Apply()).
+    private static void ApplySkinSmooth(Mat frame, Rect box)
+    {
+        var expand = (int) (box.Width * 0.15);
+        var x = Math.Max(0, box.X - expand);
+        var y = Math.Max(0, box.Y - expand);
+        var width = Math.Min(frame.Cols - x, box.Width + expand * 2);
+        var height = Math.Min(frame.Rows - y, box.Height + expand * 2);
+        if (width <= 0 || height <= 0) return;
+
+        using var faceRegion = new Mat(frame, new Rect(x, y, width, height));
+        using var smoothed = new Mat();
+        // d=9, sigmaColor=50, sigmaSpace=50 - nilai umum "beauty filter"
+        // ringan: cukup halus tapi TIDAK menghilangkan detail wajah sama
+        // sekali (belum diverifikasi dampak performa di kamera sungguhan -
+        // perlu diamati saat uji nyata, lihat catatan di README).
+        Cv2.BilateralFilter(faceRegion, smoothed, 9, 50, 50);
+        smoothed.CopyTo(faceRegion);
     }
 #endif
 

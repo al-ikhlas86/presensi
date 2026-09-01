@@ -70,7 +70,12 @@
                  tombolnya & seberapa pun sempit jendelanya. -->
             <WrapPanel Grid.Row="2" Margin="0,12,0,0" Orientation="Horizontal">
                 <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,8" />
-                <ComboBox x:Name="FilterCombo" Width="160" Margin="0,0,8,8" SelectionChanged="FilterCombo_SelectionChanged" />
+                <!-- DisplayMemberPath WAJIB - tanpa ini ComboBox menampilkan
+                     nama TIPE C# (mis. "Presensi.Filters.FaceStickerFilter")
+                     dari ToString() bawaan, BUKAN nama aslinya - jadi kalau
+                     ada >1 stiker, semuanya kelihatan sama persis di dropdown
+                     (dilaporkan user 2026-09-01, screenshot). -->
+                <ComboBox x:Name="FilterCombo" Width="160" Margin="0,0,8,8" DisplayMemberPath="DisplayName" SelectionChanged="FilterCombo_SelectionChanged" />
                 <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Padding="12,8" Margin="0,0,8,8" Click="ManageFilterButton_Click" />
                 <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="0,0,8,8" Click="SettingsButton_Click" />
                 <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="0,0,8,8" Click="ToggleRiwayatButton_Click" />

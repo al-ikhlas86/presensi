@@ -33,4 +33,13 @@ public sealed class StickerManifest
     /// setara filter Instagram/TikTok.
     /// </summary>
     public string AnchorLandmark { get; set; } = "box";
+
+    /// <summary>
+    /// "Glow" kulit halus (teknik beauty-filter umum: bilateral filter -
+    /// menghaluskan tekstur kulit TANPA mengaburkan garis wajah/mata/mulut
+    /// spt blur biasa) diterapkan di area wajah SEBELUM stiker digambar.
+    /// Default false (sticker lain TIDAK berubah). KHUSUS net8.0-windows -
+    /// diabaikan sepenuhnya di net48 (lihat FaceStickerFilter.Apply).
+    /// </summary>
+    public bool SkinSmooth { get; set; } = false;
 }
