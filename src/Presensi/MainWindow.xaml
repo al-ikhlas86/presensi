@@ -64,6 +64,7 @@
                     <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="8,0,0,0" Click="SettingsButton_Click" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="8,0,0,0" Click="ToggleRiwayatButton_Click" />
                     <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="8,0,0,0" Click="TogglePreviewButton_Click" />
                     <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="8,0,0,0" Click="ScannerButton_Click" />
                 </StackPanel>

@@ -84,15 +84,24 @@ Contoh `manifest.json` (angka boleh disesuaikan coba-coba sampai pas):
   "DisplayName": "Nama Filter yang Muncul di Dropdown",
   "WidthRatio": 1.4,
   "AnchorYRatio": -0.3,
-  "OffsetXRatio": 0.0
+  "OffsetXRatio": 0.0,
+  "AnchorLandmark": "box"
 }
 ```
 - `WidthRatio` - lebar stiker relatif thd lebar wajah (1.0 = sama lebar).
 - `AnchorYRatio` - posisi vertikal TITIK TENGAH stiker, satuan "tinggi
-  wajah" dihitung dari GARIS ATAS kepala. 0 = pas di ubun-ubun, **negatif**
-  = di ATAS kepala (helm/topi/telinga, mis. -0.4 s.d -0.6), **positif
-  kecil** = turun ke area mata (kacamata, mis. 0.2 s.d 0.3).
+  wajah" dihitung dari titik jangkar dasar (lihat `AnchorLandmark`). 0 =
+  pas di titik jangkar, **negatif** = di ATAS-nya (helm/topi/telinga, mis.
+  -0.6 s.d -0.8), **positif kecil** = di bawahnya (kacamata, mis. 0.0 s.d
+  0.1).
 - `OffsetXRatio` - geser kiri/kanan, biasanya `0` (tengah) sudah pas.
+- `AnchorLandmark` (opsional, default `"box"`) - titik jangkar dasar
+  SEBELUM `AnchorYRatio`/`OffsetXRatio` diterapkan: `"box"` (dari kotak
+  wajah kasar, satu-satunya pilihan di PC net48/Windows 7), `"eyes"` (titik
+  tengah kedua mata - presisi utk kacamata), `"eyebrows"` (titik tengah
+  alis - presisi utk topi/helm/telinga). Cuma berlaku di net8.0-windows
+  SAAT model landmark sudah siap (lihat catatan di bawah) - otomatis
+  fallback ke `"box"` di net48 atau selama model belum selesai diunduh.
 
 Lihat 3 contoh nyata di `Assets/SampleFilters/*.stiker` (buka pakai
 7-Zip/WinRAR kalau mau intip isinya) - dibuat sendiri via script
@@ -100,12 +109,17 @@ Python+Pillow, BUKAN diunduh dari internet (filter Instagram/TikTok asli
 proprietary, tidak bisa/boleh diambil dan dipakai di luar aplikasi
 mereka).
 
-**Catatan jujur soal akurasi**: ini deteksi KOTAK wajah (posisi & ukuran),
-BUKAN 68-titik landmark presisi tinggi (mata/hidung persis, ikut miring
-saat kepala miring) - itu butuh model tambahan ~100MB & lebih berat di
-CPU, sengaja belum dipakai supaya tetap ringan di PC lawas. Kalau nanti
-dirasa kurang presisi, ini bisa ditingkatkan lagi (perlu diskusi ulang
-trade-off performanya).
+**Soal akurasi (2026-09-01)**: net8.0-windows (PC Windows 10/11) sekarang
+PAKAI 68-titik landmark wajah asli ([dlib](http://dlib.net/) model resmi)
+utk 2 hal - (1) stiker ikut MIRING saat kepala miring (bukan nempel lurus
+terus), (2) titik jangkar presisi lewat `AnchorLandmark` di atas. Model
+(~64MB terkompresi) TIDAK dibundel ke instalasi/update - baru diunduh
+sendiri saat filter stiker PERTAMA KALI benar2 dipilih & dirender (bukan
+selalu di setiap startup), disimpan permanen di `%LocalAppData%\Presensi\
+models\`, dipakai lagi selamanya sesudah itu (lihat
+`Filters/LandmarkModelService.cs`). PC net48/Windows 7 TIDAK dapat fitur
+ini sama sekali (tetap deteksi kotak wajah polos) - lebih berat di CPU,
+sengaja dibatasi ke PC modern saja.
 
 **Kebutuhan tambahan di PC**: deteksi wajah pakai library native
 ([dlib](http://dlib.net/) via `DlibDotNet`) yang butuh **Visual C++
@@ -127,9 +141,20 @@ otomatis jalan di **mode uji** (`StubAttendanceApiClient` - selalu bilang
 "berhasil" palsu, tidak benar-benar mengirim presensi) supaya tetap bisa
 dicoba tanpa token dulu.
 
+## Auto-update (2026-09-01)
+
+App cek rilis terbaru sendiri lewat GitHub REST API (repo ini privat,
+jadi BUKAN lewat URL publik biasa yang selalu 404 tanpa kredensial - lihat
+`Services/UpdateService.cs`), pakai token GitHub (`GithubToken` di
+`appsettings.json`, scope Fine-grained "Contents: Read-only" KHUSUS repo
+ini). Kalau ada rilis baru: unduh zip ke folder sementara, tutup app,
+timpa file lewat helper `cmd.exe` (bukan PowerShell - kompatibel Windows 7
+tanpa WMF terbaru), buka lagi otomatis - TANPA installer, TANPA sentuhan
+manual. `appsettings.json` TIDAK PERNAH ikut tertimpa oleh update (tidak
+ada di dalam zip rilis).
+
 ## Yang BELUM (sengaja, lihat komentar di kode)
 
-- Belum ada installer/auto-updater (Velopack) - baru `dotnet publish` polos.
 - Belum ada UI pemilihan kamera/COM-port yang proper (masih ambil device
   pertama yang ketemu).
 

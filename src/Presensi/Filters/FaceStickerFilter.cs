@@ -63,40 +63,76 @@ public sealed class FaceStickerFilter : IPreviewFilter, IDisposable
 
     public void Apply(Mat previewFrame)
     {
+#if !NET48
+        // Model landmark (~64MB) SENGAJA baru mulai diunduh DI SINI (saat
+        // stiker ini benar2 dipilih & lagi dirender), BUKAN di startup app
+        // spt versi sebelumnya - diminta user 2026-09-01 ("jangan sampe
+        // sistem bikin berat") - PC yang operatornya tidak pernah pilih
+        // filter stiker (mis. tetap "Normal"/filter gambar biasa) TIDAK
+        // PERNAH mengunduh model ini sama sekali. EnsureLoadedAsync()
+        // idempotent (aman dipanggil tiap frame, cuma proses beneran 1x).
+        _ = LandmarkModelService.EnsureLoadedAsync();
+#endif
         var faceBox = FaceTracker.GetFaceBox(previewFrame);
         if (faceBox is null) return; // Tidak ada wajah terdeteksi - jangan gambar apa pun drpd stiker "melayang" sembarangan.
 
         try
         {
             var box = faceBox.Value;
+            // Skala SENGAJA TETAP dari kotak wajah apa adanya (bukan basis
+            // landmark) - box.Width sudah teruji stabil, sedangkan skala
+            // berbasis landmark (mis. lebar rahang) butuh WidthRatio ditata
+            // ulang manual tiap stiker yang belum bisa diverifikasi visual
+            // langsung di sesi ini.
             var stickerWidth = (int) (box.Width * _manifest.WidthRatio);
             var aspectRatio = (double) _stickerBgra.Rows / _stickerBgra.Cols;
             var stickerHeight = (int) (stickerWidth * aspectRatio);
             if (stickerWidth <= 0 || stickerHeight <= 0) return;
 
-            var centerX = box.X + box.Width / 2.0 + box.Width * _manifest.OffsetXRatio;
-            var centerY = box.Y + box.Height * _manifest.AnchorYRatio;
-
-            var destX = (int) (centerX - stickerWidth / 2.0);
-            var destY = (int) (centerY - stickerHeight / 2.0);
+            // Titik jangkar DASAR - "box" (bawaan/fallback) dari kotak wajah
+            // kasar, atau presisi dari landmark (mata/alis) kalau model
+            // sudah siap & manifest memintanya (lihat StickerManifest.
+            // AnchorLandmark). AnchorYRatio/OffsetXRatio tetap dipakai sbg
+            // pergeseran halus DI ATAS titik dasar ini, bukan diganti.
+            double anchorX = box.X + box.Width / 2.0;
+            double anchorY = box.Y;
 
             double rotationDegrees = 0;
 #if !NET48
-            // Kemiringan kepala (diminta user 2026-09-01, "kualitas kelas
-            // Instagram/TikTok") - stiker ikut miring mengikuti kepala,
-            // BUKAN nempel lurus terus tak peduli posisi kepala. Posisi &
-            // skala di atas SENGAJA TETAP dari kotak wajah apa adanya (TIDAK
-            // diubah ke basis landmark) supaya 3 stiker contoh yang sudah
-            // ditata (Astronot dkk) tidak perlu ditata ulang manual -
-            // landmark di sini CUMA dipakai utk sudut rotasinya.
+            // Landmark (diminta user 2026-09-01, "kualitas kelas Instagram/
+            // TikTok") dipakai utk DUA hal: (1) titik jangkar presisi kalau
+            // manifest memintanya, (2) sudut kemiringan kepala - stiker ikut
+            // miring mengikuti kepala, bukan nempel lurus terus.
             var landmarks = FaceTracker.GetFaceLandmarks(previewFrame);
             if (landmarks is { Length: 68 })
             {
                 var rightEye = AverageOf(landmarks, 36, 37, 38, 39, 40, 41);
                 var leftEye = AverageOf(landmarks, 42, 43, 44, 45, 46, 47);
                 rotationDegrees = Math.Atan2(leftEye.Y - rightEye.Y, leftEye.X - rightEye.X) * 180.0 / Math.PI;
+
+                switch (_manifest.AnchorLandmark)
+                {
+                    case "eyes":
+                        var eyeMid = AverageOf(landmarks, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47);
+                        anchorX = eyeMid.X;
+                        anchorY = eyeMid.Y;
+                        break;
+                    case "eyebrows":
+                        var browMid = AverageOf(landmarks, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26);
+                        anchorX = browMid.X;
+                        anchorY = browMid.Y;
+                        break;
+                    // "box" (atau nilai lain yang tidak dikenal) - biarkan
+                    // anchorX/anchorY dari kotak wajah di atas, tidak diubah.
+                }
             }
 #endif
+
+            var centerX = anchorX + box.Width * _manifest.OffsetXRatio;
+            var centerY = anchorY + box.Height * _manifest.AnchorYRatio;
+
+            var destX = (int) (centerX - stickerWidth / 2.0);
+            var destY = (int) (centerY - stickerHeight / 2.0);
 
             DrawClipped(previewFrame, destX, destY, stickerWidth, stickerHeight, rotationDegrees);
         }

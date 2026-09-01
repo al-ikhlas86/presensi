@@ -73,16 +73,6 @@ public partial class MainWindow : Window
         ApplyDisplayMode();
         ApplyRiwayatPanelVisibility();
 
-#if !NET48
-        // Mulai siapkan model landmark wajah di BACKGROUND sedini mungkin
-        // (bukan ditunda sampai user pertama kali pakai filter stiker) -
-        // supaya kalau memang perlu diunduh (~64MB, sekali per-PC), sudah
-        // selesai/lagi jalan duluan sebelum benar2 dibutuhkan. Gagal di sini
-        // (mis. tidak ada internet) TIDAK mengganggu apa pun - lihat
-        // LandmarkModelService, filter otomatis fallback ke mode kotak biasa.
-        _ = Filters.LandmarkModelService.EnsureLoadedAsync();
-#endif
-
         FilterManager.EnsureSeeded();
         ReloadFilters();
 
@@ -171,13 +161,27 @@ public partial class MainWindow : Window
             RiwayatSpacerColumn.Width = new GridLength(16);
             RiwayatPanelColumn.Width = new GridLength(300);
             RiwayatPanelBorder.Visibility = Visibility.Visible;
+            ToggleRiwayatButton.Content = "Sembunyikan Panel";
         }
         else
         {
             RiwayatSpacerColumn.Width = new GridLength(0);
             RiwayatPanelColumn.Width = new GridLength(0);
             RiwayatPanelBorder.Visibility = Visibility.Collapsed;
+            ToggleRiwayatButton.Content = "Tampilkan Panel";
         }
+    }
+
+    // Tombol langsung di layar utama (diminta user 2026-09-01: "sediakan
+    // tutup dan buka... jangan sampe kebuka terus") - SEBELUMNYA cuma bisa
+    // diatur lewat dialog Pengaturan (perlu buka dialog dulu tiap ganti),
+    // sekarang 1 klik langsung tutup/buka, dan pilihannya disimpan supaya
+    // diingat di buka berikutnya juga.
+    private void ToggleRiwayatButton_Click(object sender, RoutedEventArgs e)
+    {
+        _config.ShowRiwayatPanel = !_config.ShowRiwayatPanel;
+        AppConfig.Save(_config);
+        ApplyRiwayatPanelVisibility();
     }
 
     // Tinggi diambil dari area kerja layar (BUKAN angka hardcode) supaya

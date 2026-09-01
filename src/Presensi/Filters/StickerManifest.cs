@@ -21,4 +21,16 @@ public sealed class StickerManifest
 
     /// <summary>Geser horizontal, satuan "lebar wajah" (0 = tengah, sudah pas utk hampir semua stiker simetris).</summary>
     public double OffsetXRatio { get; set; } = 0.0;
+
+    /// <summary>
+    /// Titik jangkar dasar SEBELUM AnchorYRatio/OffsetXRatio diterapkan
+    /// sbg pergeseran halus - "box" (bawaan, dari kotak wajah kasar, dipakai
+    /// net48 & selama model landmark belum siap) | "eyes" (titik tengah
+    /// kedua mata - presisi utk kacamata) | "eyebrows" (titik tengah alis -
+    /// presisi utk topi/helm/telinga yang duduk di atas kepala). Diabaikan
+    /// (fallback ke "box") kalau FaceTracker.GetFaceLandmarks() null - lihat
+    /// FaceStickerFilter.Apply(). 2026-09-01, diminta user demi presisi
+    /// setara filter Instagram/TikTok.
+    /// </summary>
+    public string AnchorLandmark { get; set; } = "box";
 }
