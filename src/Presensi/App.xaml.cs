@@ -38,6 +38,18 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // WAJIB diset SEBELUM menutup/membuka window apa pun - bawaan WPF
+        // (OnLastWindowClose) memicu Shutdown() OTOMATIS begitu window
+        // TERAKHIR tertutup, walau niatnya cuma "ganti window" (splash.Close()
+        // lalu new MainWindow().Show() di baris berikutnya). TERBUKTI nyata
+        // via pengujian langsung 2026-09-01: app diam-diam keluar sendiri
+        // tanpa error/crash sama sekali persis di titik pindah splash ->
+        // MainWindow. Dgn OnExplicitShutdown, app TIDAK PERNAH keluar sendiri
+        // hanya krn 0 window sesaat - keluar sungguhan cuma lewat Shutdown()
+        // eksplisit (lihat MainWindow.xaml.cs Window_Closing & early-exit
+        // Mutex di atas).
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         _singleInstanceMutex = new Mutex(true, "Presensi_AlIkhlas86_SingleInstance", out var createdNew);
         if (!createdNew)
         {
@@ -56,21 +68,47 @@ public partial class App : Application
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
 
+        _ = RunStartupSequenceAsync();
+    }
+
+    // Popup kecil dulu (diminta user 2026-09-01) - SEBELUMNYA cek update
+    // jalan di background SETELAH MainWindow (kamera) langsung tampil, jadi
+    // kalau app dibuka SAAT ada update yang lagi diunduh (mis. sesi
+    // sebelumnya ditutup di tengah unduhan, hangus, dicoba lagi dari nol),
+    // yang kelihatan duluan langsung jendela kamera besar tanpa penjelasan.
+    // Sekarang: popup kecil "Memeriksa/Memperbarui..." tampil DULU, MainWindow
+    // baru dibuka SETELAH cek/unduh selesai (atau langsung kalau tidak ada
+    // update - biasanya cuma sekejap, GitHub API response cepat).
+    private async System.Threading.Tasks.Task RunStartupSequenceAsync()
+    {
+        var splash = new UpdateCheckWindow();
+        splash.Show();
+
+        void OnStartupStatus(string? msg) => Dispatcher.Invoke(() => splash.SetStatus(msg));
+        UpdateService.StatusChanged += OnStartupStatus;
+
         // Lihat UpdateService.cs utk alasan ini ditulis sendiri (bukan lagi
         // AutoUpdater.NET.Official) & kenapa lewat GitHub API (bukan URL
         // publik biasa - repo ini privat). AppConfig.Load() dibaca ulang tiap
         // siklus (bukan cache 1x) supaya GithubToken yang baru diisi/diganti
         // manual di appsettings.json langsung kepakai tanpa restart app.
-        // Dijalankan di background thread (Task.Run), BUKAN langsung di UI
-        // thread, krn ada unduhan file besar (~100MB+) yang tidak boleh
-        // membekukan tampilan kiosk selama proses cek/unduh berlangsung.
-        _ = System.Threading.Tasks.Task.Run(() => UpdateService.CheckAndApplyAsync(AppConfig.Load()));
+        await UpdateService.CheckAndApplyAsync(AppConfig.Load());
+
+        // Kalau update BERHASIL diterapkan, ApplyAndRestart() DI DALAM
+        // CheckAndApplyAsync SUDAH memanggil Shutdown() sendiri - baris di
+        // bawah ini tidak akan sempat berefek lagi (proses sudah menutup
+        // diri). Kalau tidak ada update / gagal cek, lanjut normal ke sini.
+        UpdateService.StatusChanged -= OnStartupStatus;
+        splash.Close();
+
+        new MainWindow().Show();
+
+        // Kiosk bisa jalan berhari-hari tanpa restart - cek sekali saat buka
+        // SAJA tidak cukup, jadi diulang berkala. Beda dari cek awal di atas
+        // (popup kecil), pengulangan ini TIDAK menutupi kamera - cukup
+        // banner kecil (lihat MainWindow.xaml.cs) krn kiosk sedang dipakai.
         _updateTimer.Tick += (_, _) => _ = System.Threading.Tasks.Task.Run(() => UpdateService.CheckAndApplyAsync(AppConfig.Load()));
         _updateTimer.Start();
-
-        // StartupUri dihapus dari App.xaml - window dibuat manual DI SINI,
-        // baru SETELAH lolos cek Mutex di atas.
-        new MainWindow().Show();
     }
 
     protected override void OnExit(ExitEventArgs e)

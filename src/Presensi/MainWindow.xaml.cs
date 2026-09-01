@@ -475,5 +475,15 @@ public partial class MainWindow : Window
         {
             if (f is IDisposable d) d.Dispose();
         }
+
+        // WAJIB eksplisit - App.xaml.cs sekarang pakai ShutdownMode.
+        // OnExplicitShutdown (bukan bawaan OnLastWindowClose), supaya
+        // popup update di awal startup bisa ditutup lalu diganti MainWindow
+        // tanpa app ikut keluar sendiri di antaranya. Konsekuensinya: kalau
+        // MainWindow ditutup (tombol X) TANPA baris ini, app akan terus
+        // "hidup" tanpa jendela apa pun (proses nyangkut, tidak pernah
+        // benar2 keluar) - jadi penutupan window utama HARUS memicu
+        // Shutdown() aplikasi secara manual di sini.
+        Application.Current.Shutdown();
     }
 }
