@@ -25,6 +25,19 @@ public sealed class AppConfig
     public string JamMasuk { get; set; } = "06:30";
     public string JamPulang { get; set; } = "15:00";
 
+    /// <summary>
+    /// "bebas" (jendela bisa diubah bebas, bawaan lama) | "fullscreen" |
+    /// "4:3" | "16:9" | "1:1" (jendela rasio tetap, tidak resizable).
+    /// </summary>
+    public string DisplayMode { get; set; } = "bebas";
+
+    /// <summary>
+    /// Port COM scanner terakhir yang berhasil tersambung - dipakai utk
+    /// otomatis konek lagi tiap app dibuka/PC dinyalakan, tanpa perlu klik
+    /// "Sambungkan Scanner" manual tiap kali (diminta user 2026-09-01).
+    /// </summary>
+    public string? ScannerPort { get; set; }
+
     private static string ConfigPath => Path.Combine(AppContext.BaseDirectory, "appsettings.json");
 
     public static AppConfig Load()

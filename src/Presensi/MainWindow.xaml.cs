@@ -1,4 +1,5 @@
 using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -42,6 +43,17 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer _modeTimer = new() { Interval = TimeSpan.FromSeconds(10) };
 
+    // Cek berkala apakah scanner yang sudah pernah dipasangkan (ScannerPort di
+    // appsettings.json) masih/kembali tersambung - scanner USB kiosk kadang
+    // lepas-colok sendiri seharian, bukan cuma soal nyambung sekali di awal.
+    private readonly DispatcherTimer _scannerReconnectTimer = new() { Interval = TimeSpan.FromSeconds(15) };
+
+    // Riwayat presensi live di panel kanan (diminta user 2026-09-01) - dibatasi
+    // 100 baris terbaru, kiosk ini jalan berhari-hari tanpa restart jadi
+    // daftarnya tidak boleh menumpuk tak terbatas (pola sama dgn Log.cs).
+    private readonly ObservableCollection<string> _riwayatPresensi = new();
+    private const int MaxRiwayat = 100;
+
     private AttendanceMode _mode = AttendanceMode.Masuk;
     private DateTime _lastIdentifyAttempt = DateTime.MinValue;
     private DateTime _cooldownUntil = DateTime.MinValue;
@@ -53,6 +65,7 @@ public partial class MainWindow : Window
 
         _config = AppConfig.Load();
         _api = BuildApiClient(_config);
+        ApplyDisplayMode();
 
         FilterManager.EnsureSeeded();
         ReloadFilters();
@@ -61,13 +74,98 @@ public partial class MainWindow : Window
         _modeTimer.Tick += (_, _) => UpdateModeDisplay();
         _modeTimer.Start();
 
+        RiwayatList.ItemsSource = _riwayatPresensi;
+
         _camera.PreviewFrameCaptured += OnPreviewFrameCaptured;
         _camera.RawFrameCaptured += OnRawFrameCaptured;
         _camera.CameraError += (_, msg) => Dispatcher.Invoke(() => StatusText.Text = "Kamera bermasalah: " + msg);
         _scanner.BarcodeScanned += OnBarcodeScanned;
-        _scanner.ScannerError += (_, msg) => Dispatcher.Invoke(() => StatusText.Text = "Scanner bermasalah: " + msg);
+        _scanner.ScannerError += (_, msg) => Dispatcher.Invoke(() =>
+        {
+            StatusText.Text = "Scanner bermasalah: " + msg;
+            UpdateScannerStatus();
+        });
+
+        // Otomatis sambung lagi ke port scanner terakhir yang berhasil dipasangkan -
+        // supaya PC yang dimatikan/software ditutup lalu dibuka lagi TIDAK perlu
+        // klik "Sambungkan Scanner" manual tiap kali (diminta user 2026-09-01).
+        var savedPort = _config.ScannerPort;
+        if (!string.IsNullOrWhiteSpace(savedPort))
+        {
+            // "!" krn net48 (reference assemblies dari NuGet, lihat catatan
+            // multi-target di Presensi.csproj) belum mengenal anotasi
+            // [NotNullWhen] di IsNullOrWhiteSpace spt net8.0-windows, jadi
+            // compiler tidak bisa mempersempit null di sana - bukan bug.
+            _scanner.Connect(savedPort!);
+        }
+        UpdateScannerStatus();
+        _scannerReconnectTimer.Tick += (_, _) => TryReconnectScannerIfNeeded();
+        _scannerReconnectTimer.Start();
 
         Loaded += (_, _) => _camera.Start();
+    }
+
+    private void ApplyDisplayMode()
+    {
+        switch (_config.DisplayMode)
+        {
+            case "fullscreen":
+                WindowStyle = WindowStyle.None;
+                ResizeMode = ResizeMode.NoResize;
+                WindowState = WindowState.Maximized;
+                break;
+            case "4:3":
+                SetWindowedAspect(4.0 / 3.0);
+                break;
+            case "16:9":
+                SetWindowedAspect(16.0 / 9.0);
+                break;
+            case "1:1":
+                SetWindowedAspect(1.0);
+                break;
+            default: // "bebas" - bawaan lama, jendela bisa diubah bebas
+                WindowStyle = WindowStyle.SingleBorderWindow;
+                ResizeMode = ResizeMode.CanResize;
+                WindowState = WindowState.Normal;
+                break;
+        }
+    }
+
+    // Tinggi diambil dari area kerja layar (BUKAN angka hardcode) supaya
+    // proporsional di monitor kiosk mana pun, lebar dihitung dari rasio.
+    private void SetWindowedAspect(double ratio)
+    {
+        WindowStyle = WindowStyle.SingleBorderWindow;
+        ResizeMode = ResizeMode.NoResize;
+        WindowState = WindowState.Normal;
+        double h = SystemParameters.WorkArea.Height * 0.85;
+        Height = h;
+        Width = h * ratio;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+    }
+
+    private void TryReconnectScannerIfNeeded()
+    {
+        if (_scanner.IsConnected) return;
+        var savedPort = _config.ScannerPort;
+        if (string.IsNullOrWhiteSpace(savedPort)) return;
+        _scanner.Connect(savedPort!); // lihat catatan "!" di konstruktor
+        UpdateScannerStatus();
+    }
+
+    private void UpdateScannerStatus()
+    {
+        ScannerStatusText.Text = _scanner.IsConnected
+            ? $"Scanner: tersambung ({_config.ScannerPort})"
+            : "Scanner: belum tersambung";
+    }
+
+    private void TambahRiwayat(string? nama, AttendanceMode mode)
+    {
+        if (string.IsNullOrWhiteSpace(nama)) return;
+        var jenis = mode == AttendanceMode.Masuk ? "masuk" : "pulang";
+        _riwayatPresensi.Insert(0, $"{nama} telah melakukan presensi {jenis} - {DateTime.Now:HH:mm:ss}");
+        while (_riwayatPresensi.Count > MaxRiwayat) _riwayatPresensi.RemoveAt(_riwayatPresensi.Count - 1);
     }
 
     private static IAttendanceApiClient BuildApiClient(AppConfig config)
@@ -116,6 +214,7 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() == true)
         {
             UpdateModeDisplay();
+            ApplyDisplayMode();
         }
     }
 
@@ -154,6 +253,14 @@ public partial class MainWindow : Window
             return;
         }
         _scanner.Connect(ports[0]);
+        if (_scanner.IsConnected)
+        {
+            // Disimpan supaya kali berikutnya PC dinyalakan/app dibuka lagi,
+            // scanner ini otomatis tersambung sendiri (lihat konstruktor).
+            _config.ScannerPort = ports[0];
+            AppConfig.Save(_config);
+        }
+        UpdateScannerStatus();
         MessageBox.Show(this, _scanner.IsConnected ? $"Tersambung ke {ports[0]}." : "Gagal tersambung.", "Scanner", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
@@ -246,6 +353,7 @@ public partial class MainWindow : Window
                 _cooldownUntil = DateTime.UtcNow.Add(CooldownAfterSuccess);
                 StatusText.Text = $"Berhasil - {result.PersonName}";
                 _sound.PlaySuccess();
+                TambahRiwayat(result.PersonName, _mode);
             }
             else
             {
@@ -271,6 +379,7 @@ public partial class MainWindow : Window
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         _modeTimer.Stop();
+        _scannerReconnectTimer.Stop();
         _camera.Dispose();
         _scanner.Dispose();
         foreach (var f in _filters)

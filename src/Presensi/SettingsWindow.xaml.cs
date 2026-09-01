@@ -1,4 +1,6 @@
+using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using Presensi.Services;
 using Window = System.Windows.Window;
 
@@ -15,6 +17,10 @@ public partial class SettingsWindow : Window
         Config = config;
         JamMasukBox.Text = config.JamMasuk;
         JamPulangBox.Text = config.JamPulang;
+
+        var match = DisplayModeCombo.Items.Cast<ComboBoxItem>()
+            .FirstOrDefault(i => (string) i.Tag == config.DisplayMode);
+        DisplayModeCombo.SelectedItem = match ?? DisplayModeCombo.Items[0];
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -32,6 +38,7 @@ public partial class SettingsWindow : Window
 
         Config.JamMasuk = JamMasukBox.Text.Trim();
         Config.JamPulang = JamPulangBox.Text.Trim();
+        Config.DisplayMode = (string) ((ComboBoxItem) DisplayModeCombo.SelectedItem).Tag;
         AppConfig.Save(Config);
         Saved = true;
         DialogResult = true;
