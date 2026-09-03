@@ -159,7 +159,7 @@ jobs:
         run: |
           gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100" \
             --jq '.workflow_runs[] | select(.status == "completed") | "\(.created_at) \(.id)"' \
-            | sort -r | tail -n +4 | awk '{print $2}' \
+            | sort -r | tail -n +3 | awk '{print $2}' \
             | while read -r id; do
                 echo "hapus run lama id=$id"
                 gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
