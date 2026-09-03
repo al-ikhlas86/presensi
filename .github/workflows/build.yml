@@ -32,7 +32,7 @@ jobs:
         # di Presensi.csproj.
         target: [net48, net8.0-windows]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Tentukan nomor versi dari tag git
         id: version
@@ -49,7 +49,7 @@ jobs:
           echo "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Setup .NET 8 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
 
@@ -72,7 +72,7 @@ jobs:
       # sekarang cuma tampilkan yang relevan (zip, diteruskan ke Releases).
       - name: Upload artifact (folder mentah, dipakai debug manual)
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Presensi-${{ matrix.target }}
           path: publish/${{ matrix.target }}
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload zip (utk dipublish job release)
         if: startsWith(github.ref, 'refs/tags/')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Presensi-Zip-${{ matrix.target }}
           path: dist/*.zip
@@ -105,11 +105,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: Presensi-Zip-net48
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: Presensi-Zip-net8.0-windows
           path: dist
@@ -118,7 +118,7 @@ jobs:
       # daftar asset rilis ini LANGSUNG lewat GitHub REST API (perlu token,
       # krn repo privat), jadi cukup pastikan nama file zip di sini konsisten.
       - name: Terbitkan GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "Presensi ${{ github.ref_name }}"
           generate_release_notes: true
@@ -147,6 +147,11 @@ jobs:
     needs: [build, release]
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      # Menghapus run lewat API butuh actions:write - job lain (build,
+      # release) sengaja TIDAK diberi ini (prinsip izin seminim mungkin),
+      # cuma job ini yang perlu.
+      actions: write
     steps:
       - name: Bersihkan run build lama (simpan 3 terbaru)
         env:
