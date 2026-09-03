@@ -123,3 +123,39 @@ jobs:
           name: "Presensi ${{ github.ref_name }}"
           generate_release_notes: true
           files: dist/*.zip
+
+  # Artefak build (folder mentah + zip rilis) MEMAKAN KUOTA STORAGE GitHub
+  # Actions - jatah 500 MB paket Free, gabungan LINTAS SEMUA repo privat di
+  # akun ini (dikonfirmasi 2026-09-02 lewat github.com/settings/billing).
+  # Terukur 2026-09-02: 38 artefak / ~4,1 GB numpuk cuma dari repo INI
+  # sendiri, jauh di atas jatah.
+  #
+  # Simpan 3 RUN terbaru (log + artefaknya - satu paket), sisanya dihapus.
+  # Menghapus run TIDAK menyentuh GitHub Release: sudah dibuktikan langsung
+  # 2026-09-02 (bukan cuma dari dokumentasi) - run v1.4.2 sempat dibiarkan
+  # utuh (tidak ikut dihapus) sementara Release-nya sendiri sudah tidak ada
+  # lebih dulu krn sebab lain, membuktikan dua sistem ini memang lepas satu
+  # sama lain. Zip yang sudah TERBIT di Release permanen tersimpan terpisah
+  # (tidak kena jatah 500 MB ini sama sekali) dan TIDAK ikut terhapus - kiosk
+  # sekolah (UpdateService.cs) narik update dari situ, bukan dari artefak
+  # Actions, jadi auto-update tetap jalan normal.
+  #
+  # Job TERPISAH (bukan langkah di job release) + if: always() supaya tetap
+  # jalan walau build/release gagal di tengah jalan - justru saat itu
+  # storage paling gampang menumpuk.
+  cleanup:
+    needs: [build, release]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bersihkan run build lama (simpan 3 terbaru)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100" \
+            --jq '.workflow_runs[] | select(.status == "completed") | "\(.created_at) \(.id)"' \
+            | sort -r | tail -n +4 | awk '{print $2}' \
+            | while read -r id; do
+                echo "hapus run lama id=$id"
+                gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
+              done
