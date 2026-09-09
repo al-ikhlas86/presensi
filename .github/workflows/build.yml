@@ -130,15 +130,18 @@ jobs:
   # Terukur 2026-09-02: 38 artefak / ~4,1 GB numpuk cuma dari repo INI
   # sendiri, jauh di atas jatah.
   #
-  # Simpan 3 RUN terbaru (log + artefaknya - satu paket), sisanya dihapus.
-  # Menghapus run TIDAK menyentuh GitHub Release: sudah dibuktikan langsung
-  # 2026-09-02 (bukan cuma dari dokumentasi) - run v1.4.2 sempat dibiarkan
-  # utuh (tidak ikut dihapus) sementara Release-nya sendiri sudah tidak ada
-  # lebih dulu krn sebab lain, membuktikan dua sistem ini memang lepas satu
-  # sama lain. Zip yang sudah TERBIT di Release permanen tersimpan terpisah
-  # (tidak kena jatah 500 MB ini sama sekali) dan TIDAK ikut terhapus - kiosk
-  # sekolah (UpdateService.cs) narik update dari situ, bukan dari artefak
-  # Actions, jadi auto-update tetap jalan normal.
+  # Simpan 3 RUN terbaru (log + artefaknya - satu paket), sisanya dihapus -
+  # ini TIDAK menyentuh GitHub Release dengan sendirinya (dibuktikan langsung
+  # 2026-09-02 - run v1.4.2 sempat dibiarkan utuh sementara Release-nya
+  # sendiri sudah tidak ada lebih dulu krn sebab lain, yaitu dihapus MANUAL,
+  # bukan otomatis oleh workflow ini).
+  #
+  # SELAIN itu (langkah kedua di bawah, ditambah 2026-09-09): daftar Release
+  # itu SENDIRI juga dibatasi 3 terbaru sekarang - rilis lama otomatis
+  # dihapus (Release + tag git-nya) begitu rilis baru ke-4 terbit, supaya
+  # halaman Releases tidak menumpuk terus tanpa batas. AMAN krn
+  # UpdateService.cs SELALU menarik release "latest" lewat API - tidak
+  # pernah merujuk versi lama yang sengaja dihapus ini.
   #
   # Job TERPISAH (bukan langkah di job release) + if: always() supaya tetap
   # jalan walau build/release gagal di tengah jalan - justru saat itu
@@ -152,6 +155,9 @@ jobs:
       # release) sengaja TIDAK diberi ini (prinsip izin seminim mungkin),
       # cuma job ini yang perlu.
       actions: write
+      # contents: write WAJIB utk hapus Release/tag lama di step kedua di
+      # bawah (ditambah 2026-09-09, pola sama diterapkan di DataMaster).
+      contents: write
     steps:
       - name: Bersihkan run build lama (simpan 3 terbaru)
         env:
@@ -163,4 +169,24 @@ jobs:
             | while read -r id; do
                 echo "hapus run lama id=$id"
                 gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
+              done
+
+      # Rilis (Release + tag git-nya) SENGAJA JUGA dibatasi 3 terbaru sejak
+      # 2026-09-09 (sebelumnya cuma run Actions yang dibersihkan, Release
+      # dibiarkan menumpuk - lihat komentar di atas soal run v1.4.2 yang
+      # Release-nya sempat hilang "karena sebab lain" yaitu dihapus manual,
+      # bukan otomatis; sekarang benar-benar otomatis). AMAN krn
+      # UpdateService.cs SELALU menarik "latest" release lewat API - kiosk
+      # manapun yang sudah ter-update tidak pernah merujuk versi lama lagi.
+      - name: Bersihkan Release lama (simpan 3 terbaru)
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "${{ github.repository }}" --limit 100 \
+            --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
+            | while read -r tag; do
+                echo "hapus release+tag lama: $tag"
+                gh release delete "$tag" --repo "${{ github.repository }}" --cleanup-tag --yes || true
               done
