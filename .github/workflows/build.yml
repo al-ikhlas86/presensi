@@ -76,7 +76,7 @@ jobs:
         with:
           name: Presensi-${{ matrix.target }}
           path: publish/${{ matrix.target }}
-          retention-days: 30
+          retention-days: 3
 
       # Langkah di bawah ini (zip + upload utk Release) SENGAJA cuma jalan
       # kalau dipicu tag - build manual (workflow_dispatch) berhenti di
@@ -90,13 +90,19 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Compress-Archive -Path "publish\$target\*" -DestinationPath "dist\Presensi-$suffix.zip" -Force
 
+      # retention-days DIPERPENDEK dari 90 hari jadi 1 (2026-09-11 - pola
+      # SAMA PERSIS DataMaster, lihat komentar panjang di build.yml repo itu:
+      # kuota storage Actions BENAR2 penuh, memblokir rilis DataMaster gagal
+      # terbit - artifact ini cuma jembatan sementara build->release job DALAM
+      # 1 run, begitu Release terbit isinya 100% berlebihan drpd salinan
+      # permanen di GitHub Releases yang tidak kena kuota Actions ini.
       - name: Upload zip (utk dipublish job release)
         if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v6
         with:
           name: Presensi-Zip-${{ matrix.target }}
           path: dist/*.zip
-          retention-days: 90
+          retention-days: 1
 
   release:
     needs: build
