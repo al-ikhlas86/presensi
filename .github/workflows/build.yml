@@ -165,18 +165,21 @@ jobs:
       # bawah (ditambah 2026-09-09, pola sama diterapkan di DataMaster).
       contents: write
     steps:
-      # CATATAN 2026-09-11: label langkah ini SEBELUMNYA salah tulis "simpan 3
-      # terbaru" - `tail -n +3` (setelah `sort -r`, terbaru duluan) SEBENARNYA
-      # SUDAH DARI DULU cuma menyisakan 2 baris TERATAS - perilaku kodenya
-      # sudah cocok dgn permintaan terbaru user "cukup 2 terbaru", cuma
-      # labelnya yang diperbaiki di sini, TIDAK ada perubahan perilaku.
+      # KOREKSI 2026-09-11 (revisi ke-2, bug NYATA - lihat catatan lengkap di
+      # build.yml DataMaster): run yang SEDANG menjalankan step ini SENDIRI
+      # belum berstatus "completed" di API saat query jalan, jadi tidak pernah
+      # terhitung dalam daftar - `tail -n +3` (skip 2) membuat steady-state-nya
+      # jadi 3 run tersisa, bukan 2 seperti diklaim sebelumnya. Diperkecil ke
+      # `tail -n +2` (skip 1) supaya steady-state benar 2. Dikonfirmasi nyata
+      # 2026-09-11: Actions tab repo ini + DataMaster + mobile-app SEMUA
+      # menunjukkan persis 3 run tersisa sebelum perbaikan ini.
       - name: Bersihkan run build lama (simpan 2 terbaru)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100" \
             --jq '.workflow_runs[] | select(.status == "completed") | "\(.created_at) \(.id)"' \
-            | sort -r | tail -n +3 | awk '{print $2}' \
+            | sort -r | tail -n +2 | awk '{print $2}' \
             | while read -r id; do
                 echo "hapus run lama id=$id"
                 gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
