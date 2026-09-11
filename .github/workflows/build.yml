@@ -165,7 +165,12 @@ jobs:
       # bawah (ditambah 2026-09-09, pola sama diterapkan di DataMaster).
       contents: write
     steps:
-      - name: Bersihkan run build lama (simpan 3 terbaru)
+      # CATATAN 2026-09-11: label langkah ini SEBELUMNYA salah tulis "simpan 3
+      # terbaru" - `tail -n +3` (setelah `sort -r`, terbaru duluan) SEBENARNYA
+      # SUDAH DARI DULU cuma menyisakan 2 baris TERATAS - perilaku kodenya
+      # sudah cocok dgn permintaan terbaru user "cukup 2 terbaru", cuma
+      # labelnya yang diperbaiki di sini, TIDAK ada perubahan perilaku.
+      - name: Bersihkan run build lama (simpan 2 terbaru)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -177,21 +182,24 @@ jobs:
                 gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
               done
 
-      # Rilis (Release + tag git-nya) SENGAJA JUGA dibatasi 3 terbaru sejak
-      # 2026-09-09 (sebelumnya cuma run Actions yang dibersihkan, Release
-      # dibiarkan menumpuk - lihat komentar di atas soal run v1.4.2 yang
-      # Release-nya sempat hilang "karena sebab lain" yaitu dihapus manual,
-      # bukan otomatis; sekarang benar-benar otomatis). AMAN krn
-      # UpdateService.cs SELALU menarik "latest" release lewat API - kiosk
-      # manapun yang sudah ter-update tidak pernah merujuk versi lama lagi.
-      - name: Bersihkan Release lama (simpan 3 terbaru)
+      # Rilis (Release + tag git-nya) SENGAJA JUGA dibatasi sejak 2026-09-09
+      # (sebelumnya cuma run Actions yang dibersihkan, Release dibiarkan
+      # menumpuk - lihat komentar di atas soal run v1.4.2 yang Release-nya
+      # sempat hilang "karena sebab lain" yaitu dihapus manual, bukan otomatis;
+      # sekarang benar-benar otomatis). AMAN krn UpdateService.cs SELALU
+      # menarik "latest" release lewat API - kiosk manapun yang sudah
+      # ter-update tidak pernah merujuk versi lama lagi. Diperkecil dari
+      # simpan-3 ke simpan-2 (2026-09-11, permintaan eksplisit user "biar
+      # storage ga penuh" - kuota Actions pernah benar2 penuh & memblokir
+      # rilis DataMaster hari yang sama).
+      - name: Bersihkan Release lama (simpan 2 terbaru)
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release list --repo "${{ github.repository }}" --limit 100 \
             --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[3:] | .[].tagName' \
+            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' \
             | while read -r tag; do
                 echo "hapus release+tag lama: $tag"
                 gh release delete "$tag" --repo "${{ github.repository }}" --cleanup-tag --yes || true
