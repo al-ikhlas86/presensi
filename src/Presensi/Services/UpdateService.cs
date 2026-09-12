@@ -14,16 +14,16 @@ using Presensi.Logging;
 namespace Presensi.Services;
 
 /// <summary>
-/// Auto-update lewat GitHub REST API (BUKAN URL "releases/latest/download/
-/// ..." biasa) - repo "presensi" SENGAJA tetap PRIVAT (keputusan user
-/// 2026-09-01), dan URL publik semacam itu TERBUKTI SELALU 404 utk repo
-/// privat tanpa kredensial apa pun (dibuktikan langsung dari log nyata PC
-/// uji, bukan asumsi). Token GitHub disimpan di appsettings.json
-/// (GithubToken) - pola SAMA PERSIS dgn KioskToken, BUKAN ditanam di kode/
-/// compiled exe supaya tidak bisa diambil lewat decompile. Harus dibuat
-/// sbg Fine-grained PAT dgn scope SESEMPIT mungkin: cuma repo "presensi",
-/// permission "Contents: Read-only" - kalau bocor pun cuma bisa baca 1
-/// repo ini, tidak bisa apa-apa lagi ke akun/repo lain.
+/// Auto-update lewat GitHub REST API. TANPA token/Authorization header
+/// (2026-09-12, repo "presensi" diubah jadi PUBLIC supaya CI/CD tidak lagi
+/// kena limit storage GitHub Actions - Artifacts/Cache selalu gratis tak
+/// terbatas utk repo public, beda dari repo privat yang punya kuota kecil).
+/// Endpoint REST API GitHub (metadata rilis maupun unduh asset lewat
+/// /releases/assets/{id}) bisa diakses siapa saja tanpa kredensial apa pun
+/// kalau repo-nya public. GithubToken di AppConfig (appsettings.json) SUDAH
+/// TIDAK DIPAKAI di sini lagi - dibiarkan ada di AppConfig (bukan dihapus)
+/// murni supaya PC yang appsettings.json-nya kebetulan masih punya baris itu
+/// tidak error, TAPI tidak lagi punya efek apa pun ke proses update.
 /// </summary>
 public static class UpdateService
 {
@@ -47,22 +47,12 @@ public static class UpdateService
     {
         try
         {
-            var token = config.GithubToken;
-            if (string.IsNullOrWhiteSpace(token))
-            {
-                Log.Warn("[Update] GithubToken kosong di appsettings.json - cek update dilewati.");
-                return;
-            }
-
             var installed = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
             Log.Info($"[Update] Cek rilis terbaru via GitHub API (versi terpasang {installed})");
 
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            // GitHub API MEWAJIBKAN User-Agent (request tanpa ini ditolak 403),
-            // dan token dikirim via header Authorization standar - BUKAN query
-            // string (supaya tidak ikut tercatat di log server/proxy mana pun).
+            // GitHub API MEWAJIBKAN User-Agent (request tanpa ini ditolak 403).
             http.DefaultRequestHeaders.UserAgent.ParseAdd("Presensi-AlIkhlas86-Updater");
-            http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token!);
             http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
 
             var releaseJson = await http.GetStringAsync(ApiLatestReleaseUrl).ConfigureAwait(false);
