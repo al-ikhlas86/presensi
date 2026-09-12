@@ -165,44 +165,37 @@ jobs:
       # bawah (ditambah 2026-09-09, pola sama diterapkan di DataMaster).
       contents: write
     steps:
-      # KOREKSI 2026-09-11 (revisi ke-2, bug NYATA - lihat catatan lengkap di
-      # build.yml DataMaster): run yang SEDANG menjalankan step ini SENDIRI
-      # belum berstatus "completed" di API saat query jalan, jadi tidak pernah
-      # terhitung dalam daftar - `tail -n +3` (skip 2) membuat steady-state-nya
-      # jadi 3 run tersisa, bukan 2 seperti diklaim sebelumnya. Diperkecil ke
-      # `tail -n +2` (skip 1) supaya steady-state benar 2. Dikonfirmasi nyata
-      # 2026-09-11: Actions tab repo ini + DataMaster + mobile-app SEMUA
-      # menunjukkan persis 3 run tersisa sebelum perbaikan ini.
-      - name: Bersihkan run build lama (simpan 2 terbaru)
+      # KOREKSI 2026-09-12 (revisi ke-3, permintaan eksplisit user "sisain 1
+      # yang terbaru aja" - lihat catatan lengkap logika self-reference di
+      # build.yml DataMaster). `tail -n +2` (skip 1) diperkecil jadi
+      # `tail -n +1` (skip 0, hapus SEMUA run lain yang terlihat) supaya
+      # steady-state benar 1 (run ini sendiri, begitu selesai).
+      - name: Bersihkan run build lama (simpan 1 terbaru)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/${{ github.repository }}/actions/workflows/build.yml/runs?per_page=100" \
             --jq '.workflow_runs[] | select(.status == "completed") | "\(.created_at) \(.id)"' \
-            | sort -r | tail -n +2 | awk '{print $2}' \
+            | sort -r | tail -n +1 | awk '{print $2}' \
             | while read -r id; do
                 echo "hapus run lama id=$id"
                 gh api -X DELETE "repos/${{ github.repository }}/actions/runs/$id" || true
               done
 
-      # Rilis (Release + tag git-nya) SENGAJA JUGA dibatasi sejak 2026-09-09
-      # (sebelumnya cuma run Actions yang dibersihkan, Release dibiarkan
-      # menumpuk - lihat komentar di atas soal run v1.4.2 yang Release-nya
-      # sempat hilang "karena sebab lain" yaitu dihapus manual, bukan otomatis;
-      # sekarang benar-benar otomatis). AMAN krn UpdateService.cs SELALU
-      # menarik "latest" release lewat API - kiosk manapun yang sudah
-      # ter-update tidak pernah merujuk versi lama lagi. Diperkecil dari
-      # simpan-3 ke simpan-2 (2026-09-11, permintaan eksplisit user "biar
-      # storage ga penuh" - kuota Actions pernah benar2 penuh & memblokir
-      # rilis DataMaster hari yang sama).
-      - name: Bersihkan Release lama (simpan 2 terbaru)
+      # Rilis (Release + tag git-nya) SENGAJA JUGA dibatasi. AMAN krn
+      # UpdateService.cs SELALU menarik "latest" release lewat API - kiosk
+      # manapun yang sudah ter-update tidak pernah merujuk versi lama lagi.
+      # Diperkecil dari simpan-2 ke simpan-1 (2026-09-12, permintaan eksplisit
+      # user - biar storage sehemat mungkin, cuma versi TERBARU yang perlu
+      # tersedia krn semua PC selalu tarik "latest").
+      - name: Bersihkan Release lama (simpan 1 terbaru)
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release list --repo "${{ github.repository }}" --limit 100 \
             --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' \
+            --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].tagName' \
             | while read -r tag; do
                 echo "hapus release+tag lama: $tag"
                 gh release delete "$tag" --repo "${{ github.repository }}" --cleanup-tag --yes || true
