@@ -40,6 +40,12 @@ public sealed class AppConfig
     public string? ScannerPort { get; set; }
 
     /// <summary>
+    /// Nomor kamera (0, 1, 2, ...) yang dipaksa dipakai. Kosong (null) = OTOMATIS: kamera pertama yang benar-benar
+    /// menghasilkan gambar. Isi hanya kalau PC punya beberapa kamera dan pilihan otomatis salah.
+    /// </summary>
+    public int? CameraIndex { get; set; }
+
+    /// <summary>
     /// Panel "Presensi Terbaru" di kanan - opsional, bisa dimatikan (diminta
     /// user 2026-09-01, PC dgn layar sempit mungkin tidak perlu panel ini).
     /// </summary>

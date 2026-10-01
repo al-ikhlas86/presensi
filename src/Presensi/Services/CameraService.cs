@@ -32,26 +32,101 @@ public sealed class CameraService : ICameraService
     public event EventHandler<Mat>? PreviewFrameCaptured;
     public event EventHandler<string>? CameraError;
 
-    public void Start(int cameraIndex = 0)
+    // Jumlah indeks kamera yang diperiksa saat pemilihan otomatis, dan batas rata-rata kecerahan (0-255)
+    // di bawah yang dianggap "gambar hitam" (kamera virtual tanpa sumber / lensa tertutup). Kamera asli di
+    // ruangan gelap tetap punya derau di atas batas ini.
+    private const int MaksKameraDiperiksa = 6;
+    private const double AmbangGambarHitam = 4.0;
+
+    // CAP_DSHOW dipaksa eksplisit (bukan biarkan OpenCV pilih backend default) - DirectShow adalah backend
+    // kamera paling kompatibel di Windows LAMA (7) sekaligus tetap didukung penuh di Windows 10/11, beda dari
+    // MSMF yang cuma ada di Windows 10+. Krn target build ini MEMANG termasuk Windows 7, backend harus yang
+    // paling luas dukungannya, bukan yang paling baru.
+    private static VideoCapture? BukaKamera(int index)
+    {
+        try
+        {
+            var cap = new VideoCapture(index, VideoCaptureAPIs.DSHOW);
+            if (cap.IsOpened()) return cap;
+            cap.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"[Kamera] index {index} gagal dibuka: {ex.Message}");
+        }
+        return null;
+    }
+
+    // true = kamera mengeluarkan gambar yang "hidup" (bukan hitam pekat). Beberapa frame awal dilewati karena
+    // kamera asli sering mengeluarkan frame gelap sesaat saat auto-exposure belum stabil.
+    private static bool MenghasilkanGambar(VideoCapture cap)
+    {
+        using var frame = new Mat();
+        var terang = 0.0;
+        for (var i = 0; i < 12; i++)
+        {
+            Thread.Sleep(60);
+            if (!cap.Read(frame) || frame.Empty()) continue;
+            if (i < 3) continue;
+            var m = Cv2.Mean(frame);
+            terang = Math.Max(terang, (m.Val0 + m.Val1 + m.Val2) / 3.0);
+        }
+        return terang >= AmbangGambarHitam;
+    }
+
+    // Pemilihan OTOMATIS: kamera pertama yang benar-benar menghasilkan gambar. Kalau tak satu pun, kamera
+    // pertama yang bisa dibuka tetap dipakai (mungkin ruangan sangat gelap / lensa tertutup) + peringatan.
+    private static (VideoCapture? Cap, int Index, bool Hidup) PilihKameraOtomatis()
+    {
+        VideoCapture? cadangan = null;
+        var cadanganIndex = -1;
+        for (var i = 0; i < MaksKameraDiperiksa; i++)
+        {
+            var cap = BukaKamera(i);
+            if (cap is null) continue;
+            if (MenghasilkanGambar(cap))
+            {
+                cadangan?.Dispose();
+                Log.Info($"[Kamera] index {i} menghasilkan gambar - dipakai.");
+                return (cap, i, true);
+            }
+            Log.Warn($"[Kamera] index {i} terbuka tapi gambarnya hitam/kosong (kamera virtual atau lensa tertutup?) - mencoba kamera berikutnya.");
+            if (cadangan is null) { cadangan = cap; cadanganIndex = i; }
+            else cap.Dispose();
+        }
+        return (cadangan, cadanganIndex, false);
+    }
+
+    public void Start(int? cameraIndex = null)
     {
         if (IsRunning) return;
 
         try
         {
-            // CAP_DSHOW dipaksa eksplisit (bukan biarkan OpenCV pilih
-            // backend default) - DirectShow adalah backend kamera paling
-            // kompatibel di Windows LAMA (7) sekaligus tetap didukung penuh
-            // di Windows 10/11, beda dari MSMF yang cuma ada di Windows 10+.
-            // Krn target build ini MEMANG termasuk Windows 7, backend harus
-            // yang paling luas dukungannya, bukan yang paling baru.
-            _capture = new VideoCapture(cameraIndex, VideoCaptureAPIs.DSHOW);
-            if (!_capture.IsOpened())
+            int dipakai;
+            if (cameraIndex.HasValue)
             {
-                CameraError?.Invoke(this, $"Tidak bisa membuka kamera index {cameraIndex}.");
-                _capture.Dispose();
-                _capture = null;
-                return;
+                dipakai = cameraIndex.Value;
+                _capture = BukaKamera(dipakai);
+                if (_capture is null)
+                {
+                    CameraError?.Invoke(this, $"Tidak bisa membuka kamera index {dipakai}.");
+                    return;
+                }
             }
+            else
+            {
+                var (cap, index, hidup) = PilihKameraOtomatis();
+                if (cap is null)
+                {
+                    CameraError?.Invoke(this, "Tidak ada kamera yang bisa dibuka.");
+                    return;
+                }
+                _capture = cap;
+                dipakai = index;
+                if (!hidup) CameraError?.Invoke(this, "Gambar kamera hitam - cek lensa tidak tertutup / kamera lain yang tersedia (atur CameraIndex di appsettings.json).");
+            }
+            cameraIndex = dipakai;
         }
         catch (Exception ex)
         {

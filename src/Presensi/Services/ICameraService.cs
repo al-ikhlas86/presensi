@@ -35,6 +35,11 @@ public interface ICameraService : IDisposable
 
     event EventHandler<string>? CameraError;
 
-    void Start(int cameraIndex = 0);
+    /// <summary>
+    /// cameraIndex null = OTOMATIS: pilih kamera pertama yang BENAR-BENAR menghasilkan gambar (kamera virtual
+    /// OBS/Swapface/dll yang terpasang di PC sering menggeser urutan & hanya mengeluarkan gambar hitam).
+    /// Diisi angka = paksa pakai kamera itu saja.
+    /// </summary>
+    void Start(int? cameraIndex = null);
     void Stop();
 }

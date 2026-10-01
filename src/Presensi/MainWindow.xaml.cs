@@ -126,7 +126,7 @@ public partial class MainWindow : Window
         _scannerReconnectTimer.Tick += (_, _) => TryReconnectScannerIfNeeded();
         _scannerReconnectTimer.Start();
 
-        Loaded += (_, _) => _camera.Start();
+        Loaded += (_, _) => _camera.Start(_config.CameraIndex);
     }
 
     private void ApplyDisplayMode()
