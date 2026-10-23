@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using OpenCvSharp;
@@ -441,6 +442,7 @@ public partial class MainWindow : Window
             {
                 _cooldownUntil = DateTime.UtcNow.Add(CooldownAfterSuccess);
                 StatusText.Text = $"Berhasil - {result.PersonName}";
+                ShowResultOverlay(result.PersonName, _mode == AttendanceMode.Masuk ? "Presensi MASUK tercatat" : "Presensi PULANG tercatat", true);
                 _sound.PlaySuccess();
                 TambahRiwayat(result.PersonName, _mode);
             }
@@ -460,15 +462,63 @@ public partial class MainWindow : Window
                 if (!string.IsNullOrEmpty(result.PersonName))
                 {
                     _cooldownUntil = DateTime.UtcNow.Add(CooldownAfterSuccess);
+                    ShowResultOverlay(result.PersonName, result.Message ?? "Sudah tercatat sebelumnya", false);
                 }
             }
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Lapisan hasil presensi: centang besar + nama (diminta user 2026-10-23,
+    // anak-anak absen ramai-ramai dan perlu tahu langsung kalau sudah masuk).
+    // Dipanggil dari UI thread (di dalam Dispatcher.BeginInvoke). Menampilkan
+    // beberapa detik lalu menghilang sendiri; hasil baru menimpa yang lama.
+    // ------------------------------------------------------------------
+    private static readonly TimeSpan ResultOverlayDuration = TimeSpan.FromSeconds(2.5);
+    private readonly DispatcherTimer _resultOverlayTimer = new();
+
+    private void ShowResultOverlay(string? nama, string detail, bool tercatat)
+    {
+        try
+        {
+            ResultName.Text = string.IsNullOrWhiteSpace(nama) ? "" : nama;
+            ResultDetail.Text = detail;
+            ResultCircle.Fill = new SolidColorBrush(tercatat
+                ? System.Windows.Media.Color.FromRgb(0x22, 0xC5, 0x5E)   // hijau
+                : System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B)); // kuning: sudah tercatat
+
+            ResultOverlay.Visibility = Visibility.Visible;
+            ResultOverlay.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
+            var pop = new DoubleAnimation(0.55, 1, TimeSpan.FromMilliseconds(380)) { EasingFunction = new BackEase { Amplitude = 0.6, EasingMode = EasingMode.EaseOut } };
+            ResultScale.BeginAnimation(ScaleTransform.ScaleXProperty, pop);
+            ResultScale.BeginAnimation(ScaleTransform.ScaleYProperty, pop);
+
+            _resultOverlayTimer.Stop();
+            _resultOverlayTimer.Interval = ResultOverlayDuration;
+            _resultOverlayTimer.Tick -= ResultOverlayTimer_Tick;
+            _resultOverlayTimer.Tick += ResultOverlayTimer_Tick;
+            _resultOverlayTimer.Start();
+        }
+        catch (Exception ex)
+        {
+            // Tampilan hanya pemanis - kegagalan di sini tidak boleh mengganggu pencatatan presensi.
+            Log.Error("Gagal menampilkan lapisan hasil presensi", ex);
+        }
+    }
+
+    private void ResultOverlayTimer_Tick(object? sender, EventArgs e)
+    {
+        _resultOverlayTimer.Stop();
+        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(250));
+        fade.Completed += (_, _) => ResultOverlay.Visibility = Visibility.Collapsed;
+        ResultOverlay.BeginAnimation(UIElement.OpacityProperty, fade);
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
         _modeTimer.Stop();
         _scannerReconnectTimer.Stop();
+        _resultOverlayTimer.Stop();
         _camera.Dispose();
         _scanner.Dispose();
         foreach (var f in _filters)

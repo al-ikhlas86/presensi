@@ -43,6 +43,30 @@
                     <Border VerticalAlignment="Bottom" HorizontalAlignment="Stretch" Background="#CC000000" Padding="16,12">
                         <TextBlock x:Name="StatusText" Text="Menunggu wajah / scan kartu..." Foreground="White" FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
                     </Border>
+                <!-- Lapisan HASIL presensi (2026-10-23, diminta user): centang BESAR + nama,
+                         supaya anak-anak yang berdiri jauh pun langsung tahu absennya
+                         masuk. Hijau = tercatat; kuning = sudah tercatat sebelumnya.
+                         Tidak menerima klik (IsHitTestVisible=False) dan hilang sendiri
+                         (lihat ShowResultOverlay di code-behind). -->
+                    <Border x:Name="ResultOverlay" Visibility="Collapsed" IsHitTestVisible="False"
+                            Background="#B3000000" Opacity="0">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Grid Width="200" Height="200" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                                <Grid.RenderTransform>
+                                    <ScaleTransform x:Name="ResultScale" ScaleX="1" ScaleY="1" />
+                                </Grid.RenderTransform>
+                                <Ellipse x:Name="ResultCircle" Fill="#22C55E" />
+                                <Path Data="M 55,105 L 88,138 L 148,66" Stroke="White" StrokeThickness="18"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
+                            </Grid>
+                            <TextBlock x:Name="ResultName" Foreground="White" FontSize="40" FontWeight="Bold"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                       MaxWidth="700" Margin="0,22,0,0" />
+                            <TextBlock x:Name="ResultDetail" Foreground="#E5E7EB" FontSize="22"
+                                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                       MaxWidth="700" Margin="0,6,0,0" />
+                        </StackPanel>
+                    </Border>
                     <!-- Banner update - MUNCUL cuma saat auto-update sedang
                          mengunduh/memasang (lihat UpdateService.StatusChanged
                          di code-behind). Ditambahkan 2026-09-01 - SEBELUM ini
