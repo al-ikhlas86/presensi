@@ -60,6 +60,7 @@ public sealed class AbsenAttendanceApiClient : IAttendanceApiClient
                 Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
             request.Headers.TryAddWithoutValidation("X-KIOSK-TOKEN", KioskToken);
+            request.Headers.TryAddWithoutValidation("X-App-Version", AppVersionInfo.Current);
 
             using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
             // ReadAsStringAsync() TANPA CancellationToken - overload dgn ct

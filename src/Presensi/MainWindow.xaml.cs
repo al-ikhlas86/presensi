@@ -68,6 +68,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        VersionText.Text = "v" + AppVersionInfo.Current;
+        Title = $"Presensi - Al-Ikhlas 86 (v{AppVersionInfo.Current})";
 
         _config = AppConfig.Load();
         _api = BuildApiClient(_config);
