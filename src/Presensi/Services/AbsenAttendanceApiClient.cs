@@ -24,8 +24,8 @@ public sealed class AbsenAttendanceApiClient : IAttendanceApiClient
 {
     private readonly HttpClient _http;
 
-    /// <summary>Base URL Mobile-app backend, TANPA trailing slash. Produksi: https://alikhlas86.duckdns.org/mobile-api</summary>
-    public string BaseUrl { get; set; } = "https://alikhlas86.duckdns.org/mobile-api";
+    /// <summary>Base URL Mobile-app backend, TANPA trailing slash. Produksi: https://app.yayasanalikhlas86.sch.id/mobile-api</summary>
+    public string BaseUrl { get; set; } = "https://app.yayasanalikhlas86.sch.id/mobile-api";
 
     /// <summary>Token kiosk perangkat ini - HARUS sama dgn KIOSK_API_TOKEN di .env Mobile-app backend.</summary>
     public string KioskToken { get; set; } = "";

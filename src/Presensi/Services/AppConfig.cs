@@ -13,7 +13,7 @@ namespace Presensi.Services;
 /// </summary>
 public sealed class AppConfig
 {
-    public string BaseUrl { get; set; } = "https://alikhlas86.duckdns.org/mobile-api";
+    public string BaseUrl { get; set; } = "https://app.yayasanalikhlas86.sch.id/mobile-api";
     public string KioskToken { get; set; } = "";
 
     /// <summary>
@@ -76,6 +76,12 @@ public sealed class AppConfig
 
             var json = File.ReadAllText(ConfigPath);
             var config = JsonSerializer.Deserialize<AppConfig>(json);
+            if (config is not null && config.BaseUrl.IndexOf("alikhlas86.duckdns.org", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // Domain resmi pindah ke sch.id (2026-10-26): kiosk lama menyimpan alamat lama di appsettings.json.
+                config.BaseUrl = config.BaseUrl.Replace("alikhlas86.duckdns.org", "app.yayasanalikhlas86.sch.id");
+                Save(config);
+            }
             return config ?? new AppConfig();
         }
         catch (Exception ex)
