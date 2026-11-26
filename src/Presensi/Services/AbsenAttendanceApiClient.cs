@@ -7,8 +7,7 @@ using Presensi.Logging;
 namespace Presensi.Services;
 
 /// <summary>
-/// Implementasi SUNGGUHAN IAttendanceApiClient - menggantikan
-/// StubAttendanceApiClient. Rantai pemanggilan (SEMUA sudah diuji end-to-
+/// Implementasi SUNGGUHAN IAttendanceApiClient. Rantai pemanggilan (SEMUA sudah diuji end-to-
 /// end nyata sampai ke database sebelum kelas ini ditulis, lihat commit
 /// Absen "Tambah endpoint token kiosk desktop" & Mobile-app "Tambah proxy
 /// kiosk desktop"):

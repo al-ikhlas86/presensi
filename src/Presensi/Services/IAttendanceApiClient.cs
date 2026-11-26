@@ -13,16 +13,8 @@ public sealed class AttendanceResult
 }
 
 /// <summary>
-/// Jembatan ke backend presensi SUNGGUHAN (Absen). BELUM diimplementasikan
-/// sungguhan - lihat StubAttendanceApiClient. Endpoint asli yang akan
-/// dipanggil nanti (dikonfirmasi dari kode Absen yang sudah ada,
-/// PresensiController.php) perlu tambahan endpoint baru berbasis TOKEN
-/// (pola sama dgn api/mobile/* yang sudah dipakai Mobile-app backend) -
-/// endpoint /presensi/face-identify yang ADA SEKARANG pakai sesi login
-/// browser + CSRF, tidak cocok dipanggil dari aplikasi desktop tanpa
-/// browser. Ini didiskusikan lagi sebelum diimplementasikan sungguhan -
-/// SENGAJA belum ditulis sekarang supaya perubahan besar di Absen tidak
-/// tercampur dgn pembangunan fondasi aplikasi desktop ini.
+/// Jembatan ke backend presensi (endpoint /api/kiosk/* berbasis token kiosk). Implementasi: AbsenAttendanceApiClient (jalur nyata) dan
+/// MenungguPersetujuanClient (perangkat belum boleh presensi: hanya menampilkan status).
 /// </summary>
 public interface IAttendanceApiClient
 {

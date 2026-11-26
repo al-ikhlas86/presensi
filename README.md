@@ -128,18 +128,21 @@ sudah punya ini bawaan/dari aplikasi lain, tapi **PC Windows 7 lawas perlu
 dicek manual** - kalau filter stiker error/tidak muncul di PC tertentu,
 ini kemungkinan besar penyebabnya (unduh dari situs resmi Microsoft).
 
-## Konfigurasi (WAJIB sebelum dipakai di PC sekolah)
+## Pendaftaran perangkat (2026-11-26)
 
-Salin `src/Presensi/appsettings.example.json` jadi `appsettings.json` di
-folder yang SAMA dengan `Presensi.exe` (bukan di source code), isi
-`KioskToken` dengan token dari server (minta ke Admin IT - tersimpan di
-`.env` Mobile-app backend sbg `KIOSK_API_TOKEN`). **Jangan pernah commit
-`appsettings.json` yang sudah berisi token asli** (sudah di-`.gitignore`).
+Tidak ada lagi token yang diketik manual. Saat pertama dibuka, aplikasi **mendaftarkan dirinya sendiri** ke server pusat
+(`POST /api/kiosk/register`; pengenal PC = hash MachineGuid Windows, disimpan di `appsettings.json` sebagai `DeviceUid`) dan
+menyimpan token perangkat (`DeviceToken`). Banner biru "menunggu persetujuan" tampil sampai Admin IT menyetujuinya di aplikasi
+admin (menu **Perangkat > Absensi**, memilih katalog SD/TK dan memberi nama). Setelah disetujui, aplikasi otomatis memakai token
+perangkat (`PerangkatService.cs`, cek status tiap 20 detik saat menunggu dan tiap 5 menit saat aktif).
 
-Kalau `appsettings.json` belum ada / `KioskToken` masih kosong, aplikasi
-otomatis jalan di **mode uji** (`StubAttendanceApiClient` - selalu bilang
-"berhasil" palsu, tidak benar-benar mengirim presensi) supaya tetap bisa
-dicoba tanpa token dulu.
+- **Tolak** = permintaan dihapus, perangkat boleh mengajukan lagi (aplikasi otomatis mengajukan lagi).
+- **Blokir** = perangkat tidak bisa presensi dan tidak bisa mendaftar lagi sampai blokir dibuka.
+- Instalasi lama yang masih punya `KioskToken` (token bersama) tetap memakainya selama belum disetujui, supaya presensi tidak
+  terputus; setelah Admin IT mematikan token lama, perangkat yang belum disetujui hanya menampilkan status.
+- Tanpa token apa pun, aplikasi TIDAK menampilkan hasil palsu: percobaan presensi dijawab pesan status pendaftaran.
+- `appsettings.json` yang hilang di PC yang sudah terdaftar: server menjawab 409 dan aplikasi memberi petunjuk agar Admin IT
+  menghapus perangkat itu lalu aplikasi dibuka ulang. **Jangan commit `appsettings.json`** (sudah di-`.gitignore`).
 
 ## Auto-update (2026-09-01)
 

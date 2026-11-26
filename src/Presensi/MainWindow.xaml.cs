@@ -38,6 +38,7 @@ public partial class MainWindow : Window
     private IAttendanceApiClient _api;
     private readonly SoundService _sound = new();
     private AppConfig _config;
+    private readonly PerangkatService _perangkat;
 
     private List<IPreviewFilter> _filters = new();
     private IPreviewFilter _activeFilter = new NoFilter();
@@ -72,7 +73,13 @@ public partial class MainWindow : Window
         Title = $"Presensi - Al-Ikhlas 86 (v{AppVersionInfo.Current})";
 
         _config = AppConfig.Load();
-        _api = BuildApiClient(_config);
+        // Pendaftaran mandiri perangkat ke server (Admin IT menyetujui di menu Perangkat > Absensi). Sebelum disetujui, token lama (bila ada)
+        // tetap dipakai agar presensi tidak terputus; setelah disetujui otomatis beralih ke token perangkat.
+        _perangkat = new PerangkatService(_config);
+        _api = BuatKlienApi();
+        _perangkat.StatusBerubah += (_, _) => Dispatcher.BeginInvoke(new Action(TerapkanStatusPerangkat));
+        TerapkanStatusPerangkat();
+        _perangkat.Mulai();
         ApplyDisplayMode();
         ApplyRiwayatPanelVisibility();
 
@@ -238,13 +245,6 @@ public partial class MainWindow : Window
     {
         if (string.IsNullOrWhiteSpace(nama)) return;
 
-        // _api Stub SELALU "berhasil" dgn nama palsu yang SAMA persis tiap ~3
-        // detik selama ada wajah di depan kamera (appsettings.json belum diisi
-        // KioskToken sungguhan) - itu murni artefak mode uji, bukan presensi
-        // sungguhan, jadi TIDAK dicatat ke panel (dilaporkan user "berisik",
-        // panel kena spam terus 2026-09-01).
-        if (_api is StubAttendanceApiClient) return;
-
         var jenis = mode == AttendanceMode.Masuk ? "masuk" : "pulang";
         var key = nama + "|" + jenis;
         // Jaga tambahan: tahan duplikat ORANG+JENIS yang SAMA kalau berulang
@@ -259,18 +259,33 @@ public partial class MainWindow : Window
         while (_riwayatPresensi.Count > MaxRiwayat) _riwayatPresensi.RemoveAt(_riwayatPresensi.Count - 1);
     }
 
-    private static IAttendanceApiClient BuildApiClient(AppConfig config)
+    /// <summary>Pilih klien API sesuai status perangkat (lihat PerangkatService). Dipanggil di UI thread.</summary>
+    private IAttendanceApiClient BuatKlienApi()
     {
-        // Token kiosk KOSONG = belum dikonfigurasi (appsettings.json baru
-        // dibuat pertama kali) - pakai Stub sementara drpd nge-spam error
-        // "tidak bisa menghubungi server" ke Absen. Isi appsettings.json
-        // (di sebelah .exe) lalu buka ulang aplikasi begitu token sudah ada.
-        if (string.IsNullOrWhiteSpace(config.KioskToken))
+        var tokenPerangkat = _perangkat.TokenPerangkat;
+        if (!string.IsNullOrWhiteSpace(tokenPerangkat))
+            return new AbsenAttendanceApiClient { BaseUrl = _config.BaseUrl, KioskToken = tokenPerangkat };
+        // Diblokir/dicabut Admin IT: perangkat ini TIDAK boleh lagi memakai token lama bersama.
+        if (_perangkat.Terlarang) return new MenungguPersetujuanClient(_perangkat.Pesan);
+        // Masih menunggu persetujuan: instalasi lama tetap memakai token lamanya (presensi tidak terputus).
+        if (!string.IsNullOrWhiteSpace(_config.KioskToken))
+            return new AbsenAttendanceApiClient { BaseUrl = _config.BaseUrl, KioskToken = _config.KioskToken };
+        // Instalasi baru tanpa token: tidak ada hasil palsu (mode uji) - tampilkan status pendaftaran.
+        return new MenungguPersetujuanClient(_perangkat.Pesan);
+    }
+
+    private void TerapkanStatusPerangkat()
+    {
+        _api = BuatKlienApi();
+        var status = _perangkat.Status;
+        if (status == StatusPerangkat.Aktif || status == StatusPerangkat.Belum)
         {
-            Logging.Log.Warn("KioskToken kosong di appsettings.json - jalan mode UJI (tidak benar-benar mengirim presensi).");
-            return new StubAttendanceApiClient();
+            PerangkatBanner.Visibility = Visibility.Collapsed;
+            return;
         }
-        return new AbsenAttendanceApiClient { BaseUrl = config.BaseUrl, KioskToken = config.KioskToken };
+        var masihJalan = !_perangkat.Terlarang && !string.IsNullOrWhiteSpace(_config.KioskToken) && status != StatusPerangkat.Aktif;
+        PerangkatBannerText.Text = masihJalan ? _perangkat.Pesan() + " Presensi tetap berjalan sementara." : _perangkat.Pesan();
+        PerangkatBanner.Visibility = Visibility.Visible;
     }
 
     private void UpdateModeDisplay()
@@ -518,6 +533,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
     {
+        _perangkat.Dispose();
         _modeTimer.Stop();
         _scannerReconnectTimer.Stop();
         _resultOverlayTimer.Stop();

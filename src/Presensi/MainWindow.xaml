@@ -75,11 +75,19 @@
                          mengunduh update (~100MB, tidak instan), jadi user
                          berkali-kali menutup app di tengah unduhan mengira
                          "tidak terjadi apa-apa" - unduhan hangus tiap kali. -->
-                    <Border x:Name="UpdateBanner" VerticalAlignment="Top" HorizontalAlignment="Stretch"
-                            Background="#E6B45309" Padding="16,12" Visibility="Collapsed">
-                        <TextBlock x:Name="UpdateBannerText" Foreground="White" FontSize="15" FontWeight="Bold"
-                                   HorizontalAlignment="Center" TextWrapping="Wrap" />
-                    </Border>
+                    <StackPanel VerticalAlignment="Top" HorizontalAlignment="Stretch">
+                        <Border x:Name="UpdateBanner" HorizontalAlignment="Stretch"
+                                Background="#E6B45309" Padding="16,12" Visibility="Collapsed">
+                            <TextBlock x:Name="UpdateBannerText" Foreground="White" FontSize="15" FontWeight="Bold"
+                                       HorizontalAlignment="Center" TextWrapping="Wrap" />
+                        </Border>
+                        <!-- Status pendaftaran perangkat ke server (menunggu persetujuan / diblokir / dicabut). -->
+                        <Border x:Name="PerangkatBanner" HorizontalAlignment="Stretch"
+                                Background="#E61D4ED8" Padding="16,10" Visibility="Collapsed">
+                            <TextBlock x:Name="PerangkatBannerText" Foreground="White" FontSize="14" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center" TextWrapping="Wrap" />
+                        </Border>
+                    </StackPanel>
                 </Grid>
             </Border>
 

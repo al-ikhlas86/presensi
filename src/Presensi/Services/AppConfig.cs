@@ -17,6 +17,18 @@ public sealed class AppConfig
     public string KioskToken { get; set; } = "";
 
     /// <summary>
+    /// Pengenal perangkat (stabil per PC, dari MachineGuid Windows) - dikirim saat mendaftar supaya PC yang sama tidak terdaftar ganda.
+    /// BUKAN kredensial. Diisi otomatis (PerangkatService), jangan diubah manual.
+    /// </summary>
+    public string? DeviceUid { get; set; }
+
+    /// <summary>
+    /// Token perangkat hasil pendaftaran mandiri (menu Perangkat &gt; Absensi di aplikasi admin). Baru berlaku setelah Admin IT menyetujui;
+    /// KioskToken lama tetap dipakai selama belum disetujui. Diisi otomatis, jangan diubah manual.
+    /// </summary>
+    public string? DeviceToken { get; set; }
+
+    /// <summary>
     /// Format "HH:mm". Batas waktu MASUK -> otomatis dianggap PULANG mulai
     /// jam ini (menggantikan toggle manual Masuk/Pulang - lihat
     /// ScheduleService.GetCurrentMode()). JamMasuk sendiri murni informasi
@@ -91,12 +103,18 @@ public sealed class AppConfig
         }
     }
 
+    private static readonly object KunciSimpan = new();
+
     public static void Save(AppConfig config)
     {
         try
         {
-            var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(ConfigPath, json);
+            // PerangkatService menyimpan dari thread timer, UI dari thread utama: jangan menulis berkas yang sama bersamaan.
+            lock (KunciSimpan)
+            {
+                var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+                File.WriteAllText(ConfigPath, json);
+            }
         }
         catch (Exception ex)
         {
