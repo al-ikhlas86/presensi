@@ -114,7 +114,7 @@
                 <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="0,0,8,8" Click="ToggleRiwayatButton_Click" />
                 <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="0,0,8,8" Click="TogglePreviewButton_Click" />
                 <Button x:Name="DaftarWajahButton" Content="Daftar Wajah Siswa..." Padding="16,8" Margin="0,0,8,8" Click="DaftarWajahButton_Click" />
-                <Button x:Name="ScannerButton"Content="Sambungkan Scanner..." Padding="16,8" Margin="0,0,8,8" Click="ScannerButton_Click" />
+                <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="0,0,8,8" Click="ScannerButton_Click" />
             </WrapPanel>
         </Grid>
 
