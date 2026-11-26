@@ -11,7 +11,13 @@ namespace Presensi.Services;
 /// </summary>
 public static class ScannerPortFinder
 {
-    public sealed record PortInfo(string PortName, string? VidPid);
+    // Class biasa (bukan record): target net48 tidak punya IsExternalInit.
+    public sealed class PortInfo
+    {
+        public PortInfo(string portName, string? vidPid) { PortName = portName; VidPid = vidPid; }
+        public string PortName { get; }
+        public string? VidPid { get; }
+    }
 
     /// <summary>Port yang sekarang ada di PC, lengkap dengan VID/PID bila port itu perangkat USB (null untuk COM bawaan/tak dikenal).</summary>
     public static IReadOnlyList<PortInfo> Daftar()
