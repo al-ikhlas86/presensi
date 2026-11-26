@@ -1,22 +1,22 @@
 <Window x:Class="Presensi.DaftarWajahWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Daftar Wajah Siswa"
+        Title="Daftar Wajah"
         Icon="Assets/app.ico"
-        Height="640" Width="980" MinHeight="520" MinWidth="820"
+        Height="680" Width="1000" MinHeight="560" MinWidth="860"
         WindowStartupLocation="CenterOwner"
         Background="#1A1D1F"
         Closing="Window_Closing">
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="340" />
+            <ColumnDefinition Width="360" />
         </Grid.ColumnDefinitions>
 
         <!-- Kiri: kamera + petunjuk langkah -->
         <DockPanel Grid.Column="0" Margin="0,0,16,0">
             <TextBlock x:Name="PetunjukText" DockPanel.Dock="Bottom" Margin="0,12,0,0" Foreground="White" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
-                       Text="Pilih kelas dan siswa, lalu tekan Mulai." />
+                       Text="Pilih kelompok dan orang, lalu tekan Mulai." />
             <TextBlock x:Name="YawText" DockPanel.Dock="Bottom" Margin="0,8,0,0" Foreground="#AAAAAA" FontSize="13" />
             <TextBlock x:Name="LangkahText" DockPanel.Dock="Bottom" Margin="0,12,0,0" Foreground="#4ADE80" FontSize="14" />
             <Border Background="Black" CornerRadius="6">
@@ -24,18 +24,46 @@
             </Border>
         </DockPanel>
 
-        <!-- Kanan: kelas, daftar siswa (urut abjad), tombol -->
+        <!-- Kanan: kelompok, daftar (urut abjad, berwarna menurut status), tombol -->
         <DockPanel Grid.Column="1">
-            <TextBlock DockPanel.Dock="Top" Text="Kelas" Foreground="#AAAAAA" Margin="0,0,0,4" />
-            <ComboBox x:Name="KelasCombo" DockPanel.Dock="Top" Margin="0,0,0,8" SelectionChanged="KelasCombo_SelectionChanged" />
-            <TextBlock x:Name="InfoText" DockPanel.Dock="Top" Foreground="#AAAAAA" TextWrapping="Wrap" Margin="0,0,0,8"
-                       Text="Tanda: ✓ lengkap, ◐ sebagian, ○ belum. Orang tua tetap bisa melihat status dan mendaftar ulang dari aplikasi HP." />
+            <TextBlock DockPanel.Dock="Top" Text="Kelompok (kelas siswa, guru, pegawai)" Foreground="#AAAAAA" Margin="0,0,0,4" />
+            <ComboBox x:Name="KelompokCombo" DockPanel.Dock="Top" Margin="0,0,0,8" DisplayMemberPath="Tampil" SelectionChanged="KelompokCombo_SelectionChanged" />
+            <CheckBox x:Name="LanjutOtomatisCheck" DockPanel.Dock="Top" IsChecked="True" Foreground="White" Margin="0,0,0,6"
+                      Content="Lanjut otomatis ke berikutnya (urut abjad, yang sudah lengkap dilewati)" />
+            <TextBlock x:Name="RingkasanText" DockPanel.Dock="Top" Foreground="#AAAAAA" Margin="0,0,0,6" TextWrapping="Wrap" />
             <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
-                <Button x:Name="MulaiButton" Content="Mulai Daftar Siswa Terpilih" Padding="12,10" Margin="0,0,0,8" IsEnabled="False" Click="Mulai_Click" />
+                <TextBlock x:Name="InfoText" Foreground="#888888" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="Hijau = lengkap, kuning = sebagian, abu-abu = belum. Orang tua tetap bisa melihat status dan mendaftar ulang dari aplikasi HP." />
+                <Button x:Name="MulaiButton" Content="Mulai dari yang Terpilih" Padding="12,10" Margin="0,0,0,8" IsEnabled="False" Click="Mulai_Click" />
                 <Button x:Name="BerhentiButton" Content="Berhenti" Padding="12,8" Margin="0,0,0,8" IsEnabled="False" Click="Berhenti_Click" />
                 <Button Content="Tutup" Padding="12,8" Click="Tutup_Click" />
             </StackPanel>
-            <ListBox x:Name="SiswaList" DisplayMemberPath="Tampil" SelectionChanged="SiswaList_SelectionChanged" />
+            <ListBox x:Name="OrangList" SelectionChanged="OrangList_SelectionChanged">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="24" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="{Binding Tanda}" FontWeight="Bold" x:Name="Tanda" Foreground="#6B7280" />
+                            <TextBlock Grid.Column="1" Text="{Binding Tampil}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding Keterangan}" FontSize="11" Margin="8,2,0,0" x:Name="Ket" Foreground="#6B7280" />
+                        </Grid>
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Status}" Value="lengkap">
+                                <Setter TargetName="Tanda" Property="Foreground" Value="#16A34A" />
+                                <Setter TargetName="Ket" Property="Foreground" Value="#16A34A" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Status}" Value="sebagian">
+                                <Setter TargetName="Tanda" Property="Foreground" Value="#D97706" />
+                                <Setter TargetName="Ket" Property="Foreground" Value="#D97706" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
         </DockPanel>
     </Grid>
 </Window>

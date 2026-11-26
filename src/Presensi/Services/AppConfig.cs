@@ -52,6 +52,12 @@ public sealed class AppConfig
     public string? ScannerPort { get; set; }
 
     /// <summary>
+    /// Identitas USB (VID/PID) scanner yang terakhir dipasangkan. Dipakai mencari scanner yang sama walau nomor COM-nya berubah
+    /// (kabel dicolok ke lubang lain, driver dimuat ulang). Null untuk scanner non-USB.
+    /// </summary>
+    public string? ScannerDeviceId { get; set; }
+
+    /// <summary>
     /// Nomor kamera (0, 1, 2, ...) yang dipaksa dipakai. Kosong (null) = OTOMATIS: kamera pertama yang benar-benar
     /// menghasilkan gambar. Isi hanya kalau PC punya beberapa kamera dan pilihan otomatis salah.
     /// </summary>

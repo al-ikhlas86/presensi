@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -5,22 +6,39 @@ using Presensi.Logging;
 
 namespace Presensi.Services;
 
-public sealed class KelasWajah
+/// <summary>Kelompok yang bisa didaftarkan wajahnya: kelas siswa, guru satu unit, atau pegawai satu unit (jenis: siswa | guru | pegawai).</summary>
+public sealed class KelompokWajah : INotifyPropertyChanged
 {
+    private int _lengkap;
     public string Kunci { get; set; } = "";
     public string Nama { get; set; } = "";
+    public string Jenis { get; set; } = "siswa";
     public int Jumlah { get; set; }
-    public override string ToString() => $"{Nama}  ({Jumlah} siswa)";
+    public int Lengkap
+    {
+        get => _lengkap;
+        set
+        {
+            if (_lengkap == value) return;
+            _lengkap = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Lengkap)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Tampil)));
+        }
+    }
+    public string Tampil => $"{Nama}  ({Lengkap}/{Jumlah} lengkap)";
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
-public sealed class SiswaWajah
+public sealed class OrangWajah
 {
     public int Id { get; set; }
     public string Nama { get; set; } = "";
     public string? Nis { get; set; }
     /// <summary>belum | sebagian | lengkap (menurut sampel wajah yang tersimpan di server).</summary>
     public string Status { get; set; } = "belum";
-    public string Tampil => $"{(Status == "lengkap" ? "✓" : Status == "sebagian" ? "◐" : "○")}  {Nama}" + (string.IsNullOrWhiteSpace(Nis) ? "" : $"  ({Nis})");
+    public string Tampil => Nama + (string.IsNullOrWhiteSpace(Nis) ? "" : $"  ({Nis})");
+    public string Tanda => Status == "lengkap" ? "✓" : Status == "sebagian" ? "◐" : "○";
+    public string Keterangan => Status == "lengkap" ? "lengkap" : Status == "sebagian" ? "sebagian" : "belum";
 }
 
 public sealed class HasilDaftar<T>
@@ -40,49 +58,52 @@ public sealed class AnalisisWajah
 }
 
 /// <summary>
-/// Pendaftaran wajah SISWA massal dari kiosk: daftar kelas dan siswa, analisis pose, dan pengiriman sampel (endpoint /api/kiosk/wajah/*, token kiosk perangkat).
-/// Server hanya mengizinkan siswa dari unit katalog perangkat ini. Semua panggilan gagal-lunak: galat jaringan menjadi pesan, bukan pengecualian.
+/// Pendaftaran wajah massal dari kiosk: daftar kelompok dan orang, analisis pose, dan pengiriman sampel (endpoint /api/kiosk/wajah/*, token kiosk perangkat).
+/// Server hanya mengizinkan orang dari unit katalog perangkat ini. Semua panggilan gagal-lunak: galat jaringan menjadi pesan, bukan pengecualian.
 /// </summary>
-public sealed class WajahSiswaApiClient
+public sealed class WajahApiClient
 {
     private readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
     private readonly string _baseUrl;
     private readonly string _token;
 
-    public WajahSiswaApiClient(string baseUrl, string token)
+    public WajahApiClient(string baseUrl, string token)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _token = token;
     }
 
-    public async Task<HasilDaftar<List<KelasWajah>>> DaftarKelasAsync()
+    public async Task<HasilDaftar<List<KelompokWajah>>> DaftarKelompokAsync()
     {
-        var (ok, pesan, data) = await KirimAsync(HttpMethod.Get, "wajah/kelas", null).ConfigureAwait(false);
-        if (!ok || data is null) return new HasilDaftar<List<KelasWajah>> { Berhasil = false, Pesan = pesan };
-        var hasil = new List<KelasWajah>();
+        var (ok, pesan, data) = await KirimAsync(HttpMethod.Get, "wajah/kelompok", null).ConfigureAwait(false);
+        if (!ok || data is null) return new HasilDaftar<List<KelompokWajah>> { Berhasil = false, Pesan = pesan };
+        var hasil = new List<KelompokWajah>();
         if (data.Value.TryGetProperty("data", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var el in arr.EnumerateArray())
             {
-                hasil.Add(new KelasWajah { Kunci = Teks(el, "kunci") ?? "", Nama = Teks(el, "nama") ?? "-", Jumlah = Angka(el, "jumlah") });
+                hasil.Add(new KelompokWajah
+                {
+                    Kunci = Teks(el, "kunci") ?? "", Nama = Teks(el, "nama") ?? "-", Jenis = Teks(el, "jenis") ?? "siswa", Jumlah = Angka(el, "jumlah"), Lengkap = Angka(el, "lengkap"),
+                });
             }
         }
-        return new HasilDaftar<List<KelasWajah>> { Berhasil = true, Data = hasil };
+        return new HasilDaftar<List<KelompokWajah>> { Berhasil = true, Data = hasil };
     }
 
-    public async Task<HasilDaftar<List<SiswaWajah>>> DaftarSiswaAsync(string kunciKelas)
+    public async Task<HasilDaftar<List<OrangWajah>>> DaftarOrangAsync(string kunciKelompok)
     {
-        var (ok, pesan, data) = await KirimAsync(HttpMethod.Get, "wajah/siswa?kelas=" + Uri.EscapeDataString(kunciKelas), null).ConfigureAwait(false);
-        if (!ok || data is null) return new HasilDaftar<List<SiswaWajah>> { Berhasil = false, Pesan = pesan };
-        var hasil = new List<SiswaWajah>();
+        var (ok, pesan, data) = await KirimAsync(HttpMethod.Get, "wajah/orang?kelompok=" + Uri.EscapeDataString(kunciKelompok), null).ConfigureAwait(false);
+        if (!ok || data is null) return new HasilDaftar<List<OrangWajah>> { Berhasil = false, Pesan = pesan };
+        var hasil = new List<OrangWajah>();
         if (data.Value.TryGetProperty("data", out var arr) && arr.ValueKind == JsonValueKind.Array)
         {
             foreach (var el in arr.EnumerateArray())
             {
-                hasil.Add(new SiswaWajah { Id = Angka(el, "id"), Nama = Teks(el, "nama") ?? "-", Nis = Teks(el, "nis"), Status = Teks(el, "status") ?? "belum" });
+                hasil.Add(new OrangWajah { Id = Angka(el, "id"), Nama = Teks(el, "nama") ?? "-", Nis = Teks(el, "nis"), Status = Teks(el, "status") ?? "belum" });
             }
         }
-        return new HasilDaftar<List<SiswaWajah>> { Berhasil = true, Data = hasil };
+        return new HasilDaftar<List<OrangWajah>> { Berhasil = true, Data = hasil };
     }
 
     public async Task<HasilDaftar<AnalisisWajah>> AnalisisAsync(byte[] jpeg)
@@ -101,10 +122,10 @@ public sealed class WajahSiswaApiClient
         return new HasilDaftar<AnalisisWajah> { Berhasil = true, Data = a };
     }
 
-    /// <summary>Mengirim satu sampel (angle: front | left | right). Berhasil = diterima face-service (sampel ditolak karena kualitas = false + pesan).</summary>
-    public async Task<HasilDaftar<bool>> KirimSampelAsync(int siswaId, string angle, byte[] jpeg)
+    /// <summary>Mengirim satu sampel (jenis: siswa | guru | pegawai; angle: front | left | right). Berhasil = diterima face-service; ditolak karena kualitas = false + pesan.</summary>
+    public async Task<HasilDaftar<bool>> KirimSampelAsync(string jenis, int id, string angle, byte[] jpeg)
     {
-        var (ok, pesan, _) = await KirimAsync(HttpMethod.Post, "wajah/sampel", new { siswa_id = siswaId, angle, image_base64 = Convert.ToBase64String(jpeg) }).ConfigureAwait(false);
+        var (ok, pesan, _) = await KirimAsync(HttpMethod.Post, "wajah/sampel", new { jenis, id, angle, image_base64 = Convert.ToBase64String(jpeg) }).ConfigureAwait(false);
         return new HasilDaftar<bool> { Berhasil = ok, Pesan = pesan, Data = ok };
     }
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,9 +13,11 @@ using Window = System.Windows.Window;
 namespace Presensi;
 
 /// <summary>
-/// Pendaftaran wajah siswa massal di kiosk: petugas memilih kelas, lalu mendaftarkan siswa satu per satu (tiga sudut: depan, kiri, kanan).
-/// Ambang kualitas dan sampel PERSIS sama dengan pendaftaran lewat HP (yaw 12 derajat, wajah >= 120 px, blur >= 30, tahan 200 ms); validasi akhir tetap di server.
-/// Frame datang dari MainWindow (thread kamera) lewat <see cref="TerimaFrameMentah"/>; semua pembaruan UI lewat Dispatcher.
+/// Pendaftaran wajah massal di kiosk: petugas memilih kelompok (kelas siswa, guru, atau pegawai), lalu mendaftarkan orangnya satu per satu (tiga sudut: depan, kiri, kanan).
+/// Mode "lanjut otomatis": begitu satu orang lengkap, orang berikutnya (urut abjad, yang sudah lengkap dilewati) langsung dimulai tanpa klik; sebelum itu orang sebelumnya
+/// harus menyingkir dari kamera supaya wajahnya tidak ikut terdaftar sebagai orang berikutnya. Ambang kualitas PERSIS sama dengan pendaftaran lewat HP (yaw 12 derajat,
+/// wajah >= 120 px, blur >= 30, tahan 200 ms); validasi akhir tetap di server. Frame datang dari MainWindow (thread kamera) lewat <see cref="TerimaFrameMentah"/>;
+/// semua pembaruan UI lewat Dispatcher.
 /// </summary>
 public partial class DaftarWajahWindow : Window
 {
@@ -32,21 +35,24 @@ public partial class DaftarWajahWindow : Window
         ("right", "Tengok sedikit ke kanan"),
     };
 
-    private readonly WajahSiswaApiClient _api;
-    private SiswaWajah? _siswa;            // siswa yang sedang didaftarkan (diatur di UI thread sebelum _aktif = true)
+    private readonly WajahApiClient _api;
+    private OrangWajah? _orang;            // orang yang sedang didaftarkan (diatur di UI thread sebelum _aktif = true)
+    private string _jenis = "siswa";       // jenis kelompok yang sedang dikerjakan: siswa | guru | pegawai
+    private string? _orangTerakhir;        // "jenis:id" orang yang terakhir dimulai; berganti orang = wajib ada jeda kosong
     private int _langkah;                  // indeks Langkah berikutnya
     private volatile bool _aktif;
     private volatile bool _tertutup;
+    private volatile bool _tungguKosong;   // menunggu kamera kosong (orang sebelumnya menyingkir) sebelum orang berikutnya dimulai
     private int _sibuk;                    // 0/1: satu analisis/pengiriman sekaligus
     private DateTime _terakhirAnalisis = DateTime.MinValue;
     private DateTime _kondisiSejak = DateTime.MinValue;
     private DateTime _jedaHingga = DateTime.MinValue;
 
-    public DaftarWajahWindow(WajahSiswaApiClient api)
+    public DaftarWajahWindow(WajahApiClient api)
     {
         _api = api;
         InitializeComponent();
-        Loaded += async (_, _) => await MuatKelasAsync();
+        Loaded += async (_, _) => await MuatKelompokAsync();
     }
 
     // ---- frame dari kamera (thread kamera; Mat dibuang oleh pemanggil) ----
@@ -72,16 +78,28 @@ public partial class DaftarWajahWindow : Window
     {
         try
         {
-            var siswa = _siswa;
-            if (siswa == null || _langkah >= Langkah.Length) return;
+            var orang = _orang;
+            var jenis = _jenis;
+            if (orang == null || _langkah >= Langkah.Length) return;
             var (sudut, petunjuk) = Langkah[_langkah];
 
             var analisis = await _api.AnalisisAsync(jpeg).ConfigureAwait(false);
             if (!_aktif || _tertutup) return;
             if (!analisis.Berhasil || analisis.Data is null) { _kondisiSejak = DateTime.MinValue; Tampil(analisis.Pesan ?? "Gagal menghubungi server, mencoba lagi...", null); return; }
             var a = analisis.Data;
+
+            // Orang sebelumnya baru selesai: tunggu kamera kosong dulu, supaya wajahnya tidak terdaftar atas nama orang berikutnya.
+            if (_tungguKosong)
+            {
+                _kondisiSejak = DateTime.MinValue;
+                if (a.WajahTerdeteksi) { Tampil($"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera.", null); return; }
+                _tungguKosong = false;
+                Tampil($"{orang.Nama}, silakan maju - {petunjuk}", null);
+                return;
+            }
+
             if (!a.WajahTerdeteksi) { _kondisiSejak = DateTime.MinValue; Tampil("Wajah tidak terdeteksi - posisikan di tengah bingkai", null); return; }
-            if (a.JumlahWajah > 1) { _kondisiSejak = DateTime.MinValue; Tampil("Terdeteksi lebih dari 1 wajah - hanya satu siswa di depan kamera", null); return; }
+            if (a.JumlahWajah > 1) { _kondisiSejak = DateTime.MinValue; Tampil("Terdeteksi lebih dari 1 wajah - hanya satu orang di depan kamera", null); return; }
 
             var sudutOk = sudut == "front" ? Math.Abs(a.Yaw) <= YawTarget : sudut == "left" ? a.Yaw <= -YawTarget : a.Yaw >= YawTarget;
             var ukuranOk = a.UkuranWajah >= UkuranMin;
@@ -89,7 +107,7 @@ public partial class DaftarWajahWindow : Window
             if (!(sudutOk && ukuranOk && blurOk))
             {
                 _kondisiSejak = DateTime.MinValue;
-                var saran = new System.Collections.Generic.List<string>();
+                var saran = new List<string>();
                 if (!sudutOk) saran.Add(petunjuk);
                 if (!ukuranOk) saran.Add("Dekatkan wajah");
                 if (!blurOk) saran.Add("Diam sebentar");
@@ -102,7 +120,7 @@ public partial class DaftarWajahWindow : Window
             if (DateTime.UtcNow - _kondisiSejak < TahanKondisi) return;
             _kondisiSejak = DateTime.MinValue;
 
-            var kirim = await _api.KirimSampelAsync(siswa.Id, sudut, jpeg).ConfigureAwait(false);
+            var kirim = await _api.KirimSampelAsync(jenis, orang.Id, sudut, jpeg).ConfigureAwait(false);
             _jedaHingga = DateTime.UtcNow + JedaSetelahSampel;
             if (!_aktif || _tertutup) return;
             if (!kirim.Berhasil)
@@ -114,7 +132,7 @@ public partial class DaftarWajahWindow : Window
             if (_langkah >= Langkah.Length)
             {
                 _aktif = false;
-                await await Dispatcher.InvokeAsync(() => SiswaSelesaiAsync(siswa));
+                await await Dispatcher.InvokeAsync(() => OrangSelesaiAsync(orang));
             }
             else
             {
@@ -138,87 +156,117 @@ public partial class DaftarWajahWindow : Window
         {
             PetunjukText.Text = petunjuk;
             YawText.Text = yaw is null ? "" : $"Sudut kepala: {yaw:0}°";
-            LangkahText.Text = _siswa is null || !_aktif ? "" : $"{_siswa.Nama} - langkah {Math.Min(_langkah + 1, Langkah.Length)} dari {Langkah.Length}";
+            LangkahText.Text = _orang is null || !_aktif ? "" : $"{_orang.Nama} - langkah {Math.Min(_langkah + 1, Langkah.Length)} dari {Langkah.Length}";
         });
     }
 
-    // ---- daftar kelas / siswa ----
+    // ---- daftar kelompok / orang ----
 
-    private async Task MuatKelasAsync()
+    private async Task MuatKelompokAsync()
     {
-        InfoText.Text = "Memuat daftar kelas...";
-        var hasil = await _api.DaftarKelasAsync();
+        InfoText.Text = "Memuat daftar kelompok...";
+        var hasil = await _api.DaftarKelompokAsync();
         if (_tertutup) return;
-        if (!hasil.Berhasil || hasil.Data is null) { InfoText.Text = hasil.Pesan ?? "Gagal memuat kelas."; return; }
-        KelasCombo.ItemsSource = hasil.Data;
+        if (!hasil.Berhasil || hasil.Data is null) { InfoText.Text = hasil.Pesan ?? "Gagal memuat kelompok."; return; }
+        KelompokCombo.ItemsSource = hasil.Data;
         InfoText.Text = hasil.Data.Count == 0
-            ? "Belum ada kelas berisi siswa aktif untuk perangkat ini."
-            : "Tanda: ✓ lengkap, ◐ sebagian, ○ belum. Orang tua tetap bisa melihat status dan mendaftar ulang dari aplikasi HP.";
+            ? "Belum ada orang aktif untuk perangkat ini."
+            : "Hijau = lengkap, kuning = sebagian, abu-abu = belum. Orang tua tetap bisa melihat status dan mendaftar ulang dari aplikasi HP.";
     }
 
-    private async void KelasCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private async void KelompokCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (KelasCombo.SelectedItem is KelasWajah kelas) await MuatSiswaAsync(kelas, null);
+        if (KelompokCombo.SelectedItem is KelompokWajah kelompok) await MuatOrangAsync(kelompok);
     }
 
-    private async Task MuatSiswaAsync(KelasWajah kelas, int? pilihId)
+    private async Task MuatOrangAsync(KelompokWajah kelompok)
     {
-        var hasil = await _api.DaftarSiswaAsync(kelas.Kunci);
-        // Pengguna bisa saja sudah pindah kelas selama menunggu - abaikan hasil basi.
-        if (_tertutup || KelasCombo.SelectedItem != kelas) return;
-        if (!hasil.Berhasil || hasil.Data is null) { InfoText.Text = hasil.Pesan ?? "Gagal memuat siswa."; return; }
-        SiswaList.ItemsSource = hasil.Data;
-        if (pilihId is int id) SiswaList.SelectedItem = hasil.Data.FirstOrDefault(s => s.Id == id);
+        var hasil = await _api.DaftarOrangAsync(kelompok.Kunci);
+        // Pengguna bisa saja sudah pindah kelompok selama menunggu - abaikan hasil basi.
+        if (_tertutup || KelompokCombo.SelectedItem != kelompok) return;
+        if (!hasil.Berhasil || hasil.Data is null) { InfoText.Text = hasil.Pesan ?? "Gagal memuat daftar."; return; }
+        _jenis = kelompok.Jenis;
+        OrangList.ItemsSource = hasil.Data;
+        var lengkap = hasil.Data.Count(o => o.Status == "lengkap");
+        var sebagian = hasil.Data.Count(o => o.Status == "sebagian");
+        kelompok.Jumlah = hasil.Data.Count;
+        kelompok.Lengkap = lengkap;
+        RingkasanText.Text = $"Lengkap {lengkap} • Sebagian {sebagian} • Belum {hasil.Data.Count - lengkap - sebagian} (dari {hasil.Data.Count})";
     }
 
-    private void SiswaList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void OrangList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        MulaiButton.IsEnabled = !_aktif && SiswaList.SelectedItem is SiswaWajah;
+        MulaiButton.IsEnabled = !_aktif && OrangList.SelectedItem is OrangWajah;
     }
 
     // ---- kendali ----
 
     private void Mulai_Click(object sender, RoutedEventArgs e)
     {
-        if (SiswaList.SelectedItem is not SiswaWajah siswa || _aktif) return;
-        _siswa = siswa;
+        if (OrangList.SelectedItem is not OrangWajah orang || _aktif) return;
+        if (orang.Status == "lengkap"
+            && MessageBox.Show(this, $"{orang.Nama} sudah terdaftar lengkap. Daftarkan ulang (menggantikan yang lama)?", "Sudah lengkap", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        MulaiUntuk(orang);
+    }
+
+    private void MulaiUntuk(OrangWajah orang)
+    {
+        var kunci = $"{_jenis}:{orang.Id}";
+        _tungguKosong = _orangTerakhir != null && _orangTerakhir != kunci; // berganti orang: tunggu kamera kosong dulu
+        _orangTerakhir = kunci;
+        _orang = orang;
         _langkah = 0;
         _kondisiSejak = DateTime.MinValue;
         _jedaHingga = DateTime.MinValue;
-        KelasCombo.IsEnabled = false;
-        SiswaList.IsEnabled = false;
+        KelompokCombo.IsEnabled = false;
+        OrangList.IsEnabled = false;
         MulaiButton.IsEnabled = false;
         BerhentiButton.IsEnabled = true;
-        PetunjukText.Text = Langkah[0].Petunjuk;
-        LangkahText.Text = $"{siswa.Nama} - langkah 1 dari {Langkah.Length}";
+        PetunjukText.Text = _tungguKosong ? $"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera." : Langkah[0].Petunjuk;
+        LangkahText.Text = $"{orang.Nama} - langkah 1 dari {Langkah.Length}";
+        YawText.Text = "";
         _aktif = true; // terakhir: thread kamera mulai memproses setelah status siap
     }
 
-    private void Berhenti_Click(object sender, RoutedEventArgs e) => Selesai("Dihentikan. Pilih siswa lalu tekan Mulai.");
+    private void Berhenti_Click(object sender, RoutedEventArgs e) => Selesai("Dihentikan. Pilih orang lalu tekan Mulai.");
 
     private void Selesai(string pesan)
     {
         _aktif = false;
-        KelasCombo.IsEnabled = true;
-        SiswaList.IsEnabled = true;
+        KelompokCombo.IsEnabled = true;
+        OrangList.IsEnabled = true;
         BerhentiButton.IsEnabled = false;
-        MulaiButton.IsEnabled = SiswaList.SelectedItem is SiswaWajah;
+        MulaiButton.IsEnabled = OrangList.SelectedItem is OrangWajah;
         PetunjukText.Text = pesan;
         YawText.Text = "";
         LangkahText.Text = "";
     }
 
-    /// <summary>Tiga sampel diterima: muat ulang status kelas, lalu pilih siswa berikutnya yang belum lengkap.</summary>
-    private async Task SiswaSelesaiAsync(SiswaWajah siswa)
+    /// <summary>Tiga sampel diterima: muat ulang status, lalu (mode otomatis) mulai orang berikutnya yang belum lengkap sesuai urutan abjad.</summary>
+    private async Task OrangSelesaiAsync(OrangWajah orang)
     {
-        Selesai($"✓ {siswa.Nama} selesai didaftarkan. Pilih siswa berikutnya.");
-        if (KelasCombo.SelectedItem is not KelasWajah kelas) return;
-        await MuatSiswaAsync(kelas, null);
-        if (SiswaList.ItemsSource is not System.Collections.Generic.List<SiswaWajah> baru) return;
-        var idx = baru.FindIndex(s => s.Id == siswa.Id);
-        var berikut = baru.Skip(idx + 1).FirstOrDefault(s => s.Status != "lengkap") ?? baru.FirstOrDefault(s => s.Status != "lengkap");
-        if (berikut is null) PetunjukText.Text = $"✓ {siswa.Nama} selesai. Semua siswa di kelas ini sudah lengkap.";
-        SiswaList.SelectedItem = berikut ?? baru.FirstOrDefault(s => s.Id == siswa.Id);
+        Selesai($"✓ {orang.Nama} selesai didaftarkan.");
+        if (KelompokCombo.SelectedItem is not KelompokWajah kelompok) return;
+        await MuatOrangAsync(kelompok);
+        if (_tertutup || _aktif || OrangList.ItemsSource is not List<OrangWajah> baru) return;
+        var idx = baru.FindIndex(o => o.Id == orang.Id);
+        var berikut = baru.Skip(idx + 1).FirstOrDefault(o => o.Status != "lengkap") ?? baru.FirstOrDefault(o => o.Status != "lengkap");
+        if (berikut is null)
+        {
+            PetunjukText.Text = $"✓ {orang.Nama} selesai. Semua di kelompok ini sudah lengkap.";
+            OrangList.SelectedItem = baru.FirstOrDefault(o => o.Id == orang.Id);
+            return;
+        }
+        if (berikut.Id == orang.Id)
+        {
+            // Server belum mencatat tiga sampel orang ini: jangan mengulang diam-diam tanpa akhir.
+            PetunjukText.Text = $"{orang.Nama} belum tercatat lengkap di server. Periksa koneksi lalu daftarkan ulang.";
+            OrangList.SelectedItem = berikut;
+            return;
+        }
+        OrangList.SelectedItem = berikut;
+        if (LanjutOtomatisCheck.IsChecked == true) MulaiUntuk(berikut);
+        else PetunjukText.Text = $"✓ {orang.Nama} selesai. Pilih orang berikutnya.";
     }
 
     private void Tutup_Click(object sender, RoutedEventArgs e) => Close();

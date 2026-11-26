@@ -8,6 +8,9 @@ namespace Presensi.Services;
 public interface IBarcodeScannerService : IDisposable
 {
     bool IsConnected { get; }
+
+    /// <summary>False bila port yang terbuka sudah hilang dari PC (kabel dicabut): handle lama tidak berguna lagi dan harus dibuang.</summary>
+    bool PortMasihAda { get; }
     event EventHandler<string>? BarcodeScanned;
     event EventHandler<string>? ScannerError;
 

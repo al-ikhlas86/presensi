@@ -26,6 +26,9 @@
             <DockPanel Grid.Row="0" Margin="0,0,0,12">
                 <TextBlock Text="Presensi Al-Ikhlas 86" FontSize="22" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
                 <TextBlock x:Name="VersionText" FontSize="14" Foreground="#9CA3AF" VerticalAlignment="Center" Margin="10,4,0,0" />
+                <Border x:Name="ScannerChipBorder" CornerRadius="10" Padding="10,3" Margin="16,4,0,0" VerticalAlignment="Center" Background="#374151">
+                    <TextBlock x:Name="ScannerChip" FontSize="12" Foreground="White" />
+                </Border>
                 <!-- Mode Masuk/Pulang OTOMATIS berdasar jam PC + jadwal di Pengaturan -
                      tidak ada lagi toggle manual (lihat ScheduleService.GetCurrentMode). -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right" VerticalAlignment="Center">
@@ -57,7 +60,7 @@
                                     <ScaleTransform x:Name="ResultScale" ScaleX="1" ScaleY="1" />
                                 </Grid.RenderTransform>
                                 <Ellipse x:Name="ResultCircle" Fill="#22C55E" />
-                                <Path Data="M 55,105 L 88,138 L 148,66" Stroke="White" StrokeThickness="18"
+                                <Path x:Name="ResultMark" Data="M 55,105 L 88,138 L 148,66" Stroke="White" StrokeThickness="18"
                                       StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" />
                             </Grid>
                             <TextBlock x:Name="ResultName" Foreground="White" FontSize="40" FontWeight="Bold"
@@ -102,19 +105,25 @@
                  tombol otomatis lanjut ke baris berikutnya, apa pun jumlah
                  tombolnya & seberapa pun sempit jendelanya. -->
             <WrapPanel Grid.Row="2" Margin="0,12,0,0" Orientation="Horizontal">
-                <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,8" />
+                <WrapPanel.Resources>
+                    <Style TargetType="Button">
+                        <Setter Property="Padding" Value="10,6" />
+                        <Setter Property="Margin" Value="0,0,6,6" />
+                    </Style>
+                </WrapPanel.Resources>
+                <TextBlock Text="Filter:" Foreground="White" VerticalAlignment="Center" Margin="0,0,6,6" />
                 <!-- DisplayMemberPath WAJIB - tanpa ini ComboBox menampilkan
                      nama TIPE C# (mis. "Presensi.Filters.FaceStickerFilter")
                      dari ToString() bawaan, BUKAN nama aslinya - jadi kalau
                      ada >1 stiker, semuanya kelihatan sama persis di dropdown
                      (dilaporkan user 2026-09-01, screenshot). -->
-                <ComboBox x:Name="FilterCombo" Width="160" Margin="0,0,8,8" DisplayMemberPath="DisplayName" SelectionChanged="FilterCombo_SelectionChanged" />
-                <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Padding="12,8" Margin="0,0,8,8" Click="ManageFilterButton_Click" />
-                <Button x:Name="SettingsButton" Content="Pengaturan..." Padding="12,8" Margin="0,0,8,8" Click="SettingsButton_Click" />
-                <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Padding="16,8" Margin="0,0,8,8" Click="ToggleRiwayatButton_Click" />
-                <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Padding="16,8" Margin="0,0,8,8" Click="TogglePreviewButton_Click" />
-                <Button x:Name="DaftarWajahButton" Content="Daftar Wajah Siswa..." Padding="16,8" Margin="0,0,8,8" Click="DaftarWajahButton_Click" />
-                <Button x:Name="ScannerButton" Content="Sambungkan Scanner..." Padding="16,8" Margin="0,0,8,8" Click="ScannerButton_Click" />
+                <ComboBox x:Name="FilterCombo" Width="140" Margin="0,0,6,6" DisplayMemberPath="DisplayName" SelectionChanged="FilterCombo_SelectionChanged" />
+                <Button x:Name="ManageFilterButton" Content="Kelola Filter..." Click="ManageFilterButton_Click" />
+                <Button x:Name="SettingsButton" Content="Pengaturan..." Click="SettingsButton_Click" />
+                <Button x:Name="ToggleRiwayatButton" Content="Sembunyikan Panel" Click="ToggleRiwayatButton_Click" />
+                <Button x:Name="TogglePreviewButton" Content="Matikan Preview" Click="TogglePreviewButton_Click" />
+                <Button x:Name="DaftarWajahButton" Content="Daftar Wajah..." Click="DaftarWajahButton_Click" />
+                <Button x:Name="ScannerButton" Content="Scanner..." Click="ScannerButton_Click" />
             </WrapPanel>
         </Grid>
 

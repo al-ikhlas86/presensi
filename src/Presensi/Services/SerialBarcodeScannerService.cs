@@ -18,6 +18,15 @@ public sealed class SerialBarcodeScannerService : IBarcodeScannerService
 
     public bool IsConnected => _port?.IsOpen == true;
 
+    public bool PortMasihAda
+    {
+        get
+        {
+            var nama = _port?.PortName;
+            return nama != null && GetAvailablePorts().Contains(nama, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     public event EventHandler<string>? BarcodeScanned;
     public event EventHandler<string>? ScannerError;
 

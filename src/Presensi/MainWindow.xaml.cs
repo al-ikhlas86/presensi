@@ -61,7 +61,7 @@ public partial class MainWindow : Window
     private DateTime _cooldownUntil = DateTime.MinValue;
     private int _busyFlag; // 0/1, dijaga Interlocked - cegah tumpang-tindih panggilan API
 
-    // Selama jendela "Daftar Wajah Siswa" terbuka, frame kamera disalurkan ke sana
+    // Selama jendela "Daftar Wajah" terbuka, frame kamera disalurkan ke sana
     // (dan presensi wajah dijeda supaya wajah siswa yang sedang didaftarkan tidak ikut dikenali).
     // Dibaca dari thread kamera, ditulis di UI thread -> volatile.
     private volatile Action<Mat>? _penerimaFrameMentah;
@@ -126,18 +126,10 @@ public partial class MainWindow : Window
             UpdateScannerStatus();
         });
 
-        // Otomatis sambung lagi ke port scanner terakhir yang berhasil dipasangkan -
-        // supaya PC yang dimatikan/software ditutup lalu dibuka lagi TIDAK perlu
-        // klik "Sambungkan Scanner" manual tiap kali (diminta user 2026-09-01).
-        var savedPort = _config.ScannerPort;
-        if (!string.IsNullOrWhiteSpace(savedPort))
-        {
-            // "!" krn net48 (reference assemblies dari NuGet, lihat catatan
-            // multi-target di Presensi.csproj) belum mengenal anotasi
-            // [NotNullWhen] di IsNullOrWhiteSpace spt net8.0-windows, jadi
-            // compiler tidak bisa mempersempit null di sana - bukan bug.
-            _scanner.Connect(savedPort!);
-        }
+        // Otomatis sambung lagi ke scanner yang pernah dipasangkan, dicari lewat identitas USB-nya (bukan hanya nomor COM yang bisa berubah)
+        // supaya PC yang dimatikan/dibuka lagi TIDAK perlu klik "Scanner..." manual (diminta user 2026-09-01, diperkuat 2026-11-28).
+        TryReconnectScannerIfNeeded();
+        Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
         UpdateScannerStatus();
         _scannerReconnectTimer.Tick += (_, _) => TryReconnectScannerIfNeeded();
         _scannerReconnectTimer.Start();
@@ -233,18 +225,44 @@ public partial class MainWindow : Window
 
     private void TryReconnectScannerIfNeeded()
     {
+        // Kabel dicabut: handle port lama masih "terbuka" tetapi mati (scan tidak masuk, tanpa tanda apa pun). Buang agar bisa menyambung ulang.
+        if (_scanner.IsConnected && !_scanner.PortMasihAda) _scanner.Disconnect();
         if (_scanner.IsConnected) return;
-        var savedPort = _config.ScannerPort;
-        if (string.IsNullOrWhiteSpace(savedPort)) return;
-        _scanner.Connect(savedPort!); // lihat catatan "!" di konstruktor
+        if (string.IsNullOrWhiteSpace(_config.ScannerPort) && string.IsNullOrWhiteSpace(_config.ScannerDeviceId)) { UpdateScannerStatus(); return; }
+        var port = ScannerPortFinder.CariPort(_config.ScannerDeviceId, _config.ScannerPort);
+        if (port != null)
+        {
+            _scanner.Connect(port);
+            if (_scanner.IsConnected && !string.Equals(port, _config.ScannerPort, StringComparison.OrdinalIgnoreCase))
+            {
+                Log.Info($"[Scanner] scanner pindah port: {_config.ScannerPort} -> {port}");
+                _config.ScannerPort = port; // nomor COM berubah tetapi perangkatnya sama
+                AppConfig.Save(_config);
+            }
+        }
         UpdateScannerStatus();
+    }
+
+    /// <summary>Setelah PC bangun dari tidur, handle serial lama biasanya mati: tutup, lalu biarkan timer menyambung ulang.</summary>
+    private void OnPowerModeChanged(object? sender, Microsoft.Win32.PowerModeChangedEventArgs e)
+    {
+        if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _scanner.Disconnect();
+            TryReconnectScannerIfNeeded();
+        }));
     }
 
     private void UpdateScannerStatus()
     {
+        var belumPernah = string.IsNullOrWhiteSpace(_config.ScannerPort) && string.IsNullOrWhiteSpace(_config.ScannerDeviceId);
         ScannerStatusText.Text = _scanner.IsConnected
             ? $"Scanner: tersambung ({_config.ScannerPort})"
-            : "Scanner: belum tersambung";
+            : belumPernah ? "Scanner: belum dipasangkan" : "Scanner: tidak terdeteksi (cek kabel USB)";
+        // Penanda selalu terlihat di judul (panel kanan bisa disembunyikan): petugas tahu scanner kartu siap atau tidak sebelum antrean datang.
+        ScannerChip.Text = _scanner.IsConnected ? $"\u25CF Scanner kartu siap ({_config.ScannerPort})" : belumPernah ? "\u25CF Scanner kartu belum dipasangkan" : "\u25CF Scanner kartu TIDAK TERSAMBUNG";
+        ScannerChipBorder.Background = new SolidColorBrush(_scanner.IsConnected ? Color.FromRgb(0x15, 0x80, 0x3D) : belumPernah ? Color.FromRgb(0x4B, 0x55, 0x63) : Color.FromRgb(0xB9, 0x1C, 0x1C));
     }
 
     private void TambahRiwayat(string? nama, AttendanceMode mode)
@@ -359,10 +377,10 @@ public partial class MainWindow : Window
         var token = _perangkat.TokenPerangkat;
         if (string.IsNullOrWhiteSpace(token))
         {
-            MessageBox.Show(this, "Perangkat ini belum disetujui Admin IT (belum punya token perangkat). Pendaftaran wajah siswa baru bisa dipakai setelah perangkat aktif.", "Daftar Wajah Siswa", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "Perangkat ini belum disetujui Admin IT (belum punya token perangkat). Pendaftaran wajah baru bisa dipakai setelah perangkat aktif.", "Daftar Wajah", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var klien = new WajahSiswaApiClient(_config.BaseUrl, token);
+        var klien = new WajahApiClient(_config.BaseUrl, token);
         var jendela = new DaftarWajahWindow(klien) { Owner = this };
         _penerimaFrameMentah = jendela.TerimaFrameMentah;
         _penerimaPreview = jendela.TerimaPreview;
@@ -376,25 +394,27 @@ public partial class MainWindow : Window
 
     private void ScannerButton_Click(object sender, RoutedEventArgs e)
     {
-        // Dialog pemilihan port sengaja SEDERHANA (v1) - daftar port lalu
-        // pilih yang pertama tersedia. Diganti dialog pilihan resmi kalau
-        // di lapangan ternyata >1 device serial terpasang bersamaan.
-        var ports = SerialBarcodeScannerService.GetAvailablePorts();
-        if (ports.Length == 0)
+        var daftar = ScannerPortFinder.Daftar();
+        if (daftar.Count == 0)
         {
-            MessageBox.Show(this, "Tidak ada port serial terdeteksi. Pastikan scanner sudah tersambung.", "Scanner", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, "Tidak ada port serial terdeteksi. Pastikan scanner sudah tersambung ke kabel USB.", "Scanner", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        _scanner.Connect(ports[0]);
+        // Scanner mode CDC muncul sebagai port USB; COM bawaan PC (tanpa identitas USB) disisihkan bila ada pilihan USB.
+        var usb = daftar.Where(p => p.VidPid != null).ToList();
+        var kandidat = usb.Count > 0 ? usb : daftar.ToList();
+        var pilihan = kandidat.Count == 1 ? kandidat[0] : new PilihPortWindow(kandidat) { Owner = this }.Tampilkan();
+        if (pilihan == null) return;
+        _scanner.Connect(pilihan.PortName);
         if (_scanner.IsConnected)
         {
-            // Disimpan supaya kali berikutnya PC dinyalakan/app dibuka lagi,
-            // scanner ini otomatis tersambung sendiri (lihat konstruktor).
-            _config.ScannerPort = ports[0];
+            // Disimpan supaya kali berikutnya PC dinyalakan/app dibuka lagi, scanner ini otomatis tersambung sendiri walau nomor COM-nya berubah.
+            _config.ScannerPort = pilihan.PortName;
+            _config.ScannerDeviceId = pilihan.VidPid;
             AppConfig.Save(_config);
         }
         UpdateScannerStatus();
-        MessageBox.Show(this, _scanner.IsConnected ? $"Tersambung ke {ports[0]}." : "Gagal tersambung.", "Scanner", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show(this, _scanner.IsConnected ? $"Tersambung ke {pilihan.PortName}." : "Gagal tersambung. Pastikan tidak ada program lain yang memakai scanner ini.", "Scanner", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     // ------------------------------------------------------------------
@@ -470,17 +490,50 @@ public partial class MainWindow : Window
         }
     }
 
+    // Kartu discan bergiliran oleh banyak anak: SATU jeda global (seperti pada wajah) membuang scan kartu berikutnya diam-diam. Yang ditahan hanya kode yang SAMA
+    // dalam beberapa detik (kartu yang terbaca dua kali); kartu lain langsung diproses. Gagal terkirim/tidak terdaftar = kode boleh discan lagi.
+    private static readonly TimeSpan BarcodeDedup = TimeSpan.FromSeconds(4);
+    private readonly Dictionary<string, DateTime> _barcodeTerakhir = new();
+
+    private bool TahanBarcodeGanda(string barcode)
+    {
+        lock (_barcodeTerakhir)
+        {
+            var sekarang = DateTime.UtcNow;
+            if (_barcodeTerakhir.TryGetValue(barcode, out var t) && sekarang - t < BarcodeDedup) return true;
+            if (_barcodeTerakhir.Count > 200)
+            {
+                foreach (var k in _barcodeTerakhir.Where(x => sekarang - x.Value >= BarcodeDedup).Select(x => x.Key).ToList()) _barcodeTerakhir.Remove(k);
+            }
+            _barcodeTerakhir[barcode] = sekarang;
+            return false;
+        }
+    }
+
+    private void LupakanBarcode(string barcode)
+    {
+        lock (_barcodeTerakhir) _barcodeTerakhir.Remove(barcode);
+    }
+
     private async void OnBarcodeScanned(object? sender, string barcode)
     {
-        if (DateTime.UtcNow < _cooldownUntil || _penerimaFrameMentah != null) return; // dijeda selama pendaftaran wajah
+        if (_penerimaFrameMentah != null) return; // dijeda selama pendaftaran wajah
+        if (TahanBarcodeGanda(barcode)) return;
         try
         {
             var result = await _api.SubmitBarcodeAsync(barcode, _mode).ConfigureAwait(false);
             HandleAttendanceResult(result);
+            if (!result.Success && string.IsNullOrEmpty(result.PersonName))
+            {
+                LupakanBarcode(barcode);
+                Dispatcher.BeginInvoke(new Action(() => ShowResultOverlay($"Kartu {barcode}", result.Message ?? "Tidak dikenali.", false, gagal: true)));
+            }
         }
         catch (Exception ex)
         {
             Log.Error("Gagal mengirim barcode", ex);
+            LupakanBarcode(barcode);
+            Dispatcher.BeginInvoke(new Action(() => ShowResultOverlay("Gagal mengirim", "Periksa koneksi internet lalu scan kartu lagi.", false, gagal: true)));
         }
     }
 
@@ -527,15 +580,18 @@ public partial class MainWindow : Window
     private static readonly TimeSpan ResultOverlayDuration = TimeSpan.FromSeconds(2.5);
     private readonly DispatcherTimer _resultOverlayTimer = new();
 
-    private void ShowResultOverlay(string? nama, string detail, bool tercatat)
+    private void ShowResultOverlay(string? nama, string detail, bool tercatat, bool gagal = false)
     {
         try
         {
             ResultName.Text = string.IsNullOrWhiteSpace(nama) ? "" : nama;
             ResultDetail.Text = detail;
-            ResultCircle.Fill = new SolidColorBrush(tercatat
-                ? System.Windows.Media.Color.FromRgb(0x22, 0xC5, 0x5E)   // hijau
-                : System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B)); // kuning: sudah tercatat
+            ResultCircle.Fill = new SolidColorBrush(gagal
+                ? System.Windows.Media.Color.FromRgb(0xDC, 0x26, 0x26)   // merah: gagal / tidak terdaftar
+                : tercatat
+                    ? System.Windows.Media.Color.FromRgb(0x22, 0xC5, 0x5E)   // hijau
+                    : System.Windows.Media.Color.FromRgb(0xF5, 0x9E, 0x0B)); // kuning: sudah tercatat
+            ResultMark.Data = Geometry.Parse(gagal ? "M 62,62 L 138,138 M 138,62 L 62,138" : "M 55,105 L 88,138 L 148,66");
 
             ResultOverlay.Visibility = Visibility.Visible;
             ResultOverlay.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
@@ -569,6 +625,7 @@ public partial class MainWindow : Window
         _perangkat.Dispose();
         _modeTimer.Stop();
         _scannerReconnectTimer.Stop();
+        Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _resultOverlayTimer.Stop();
         _camera.Dispose();
         _scanner.Dispose();
