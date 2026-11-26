@@ -61,6 +61,12 @@ public partial class MainWindow : Window
     private DateTime _cooldownUntil = DateTime.MinValue;
     private int _busyFlag; // 0/1, dijaga Interlocked - cegah tumpang-tindih panggilan API
 
+    // Selama jendela "Daftar Wajah Siswa" terbuka, frame kamera disalurkan ke sana
+    // (dan presensi wajah dijeda supaya wajah siswa yang sedang didaftarkan tidak ikut dikenali).
+    // Dibaca dari thread kamera, ditulis di UI thread -> volatile.
+    private volatile Action<Mat>? _penerimaFrameMentah;
+    private volatile Action<BitmapSource>? _penerimaPreview;
+
     // Dipakai TambahRiwayat menahan duplikat beruntun (lihat catatan di sana).
     private string? _lastRiwayatKey;
     private DateTime _lastRiwayatAt = DateTime.MinValue;
@@ -348,6 +354,26 @@ public partial class MainWindow : Window
         if (!_camera.PreviewEnabled) PreviewImage.Source = null; // lepas bitmap lama, jangan biarkan gambar beku nyangkut
     }
 
+    private void DaftarWajahButton_Click(object sender, RoutedEventArgs e)
+    {
+        var token = _perangkat.TokenPerangkat;
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            MessageBox.Show(this, "Perangkat ini belum disetujui Admin IT (belum punya token perangkat). Pendaftaran wajah siswa baru bisa dipakai setelah perangkat aktif.", "Daftar Wajah Siswa", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var klien = new WajahSiswaApiClient(_config.BaseUrl, token);
+        var jendela = new DaftarWajahWindow(klien) { Owner = this };
+        _penerimaFrameMentah = jendela.TerimaFrameMentah;
+        _penerimaPreview = jendela.TerimaPreview;
+        try { jendela.ShowDialog(); }
+        finally
+        {
+            _penerimaFrameMentah = null;
+            _penerimaPreview = null;
+        }
+    }
+
     private void ScannerButton_Click(object sender, RoutedEventArgs e)
     {
         // Dialog pemilihan port sengaja SEDERHANA (v1) - daftar port lalu
@@ -384,6 +410,7 @@ public partial class MainWindow : Window
             var bitmap = frame.ToBitmapSource();
             bitmap.Freeze(); // wajib - dibuat di background thread, dipakai di UI thread
             Dispatcher.BeginInvoke(() => PreviewImage.Source = bitmap);
+            _penerimaPreview?.Invoke(bitmap);
         }
         catch (Exception ex)
         {
@@ -405,6 +432,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            var penerima = _penerimaFrameMentah;
+            if (penerima != null)
+            {
+                penerima(frame); // mode pendaftaran wajah: presensi wajah dijeda, frame hanya untuk jendela pendaftaran
+                return;
+            }
             var now = DateTime.UtcNow;
             if (now < _cooldownUntil) return;
             if (now - _lastIdentifyAttempt < IdentifyThrottle) return;
@@ -439,7 +472,7 @@ public partial class MainWindow : Window
 
     private async void OnBarcodeScanned(object? sender, string barcode)
     {
-        if (DateTime.UtcNow < _cooldownUntil) return;
+        if (DateTime.UtcNow < _cooldownUntil || _penerimaFrameMentah != null) return; // dijeda selama pendaftaran wajah
         try
         {
             var result = await _api.SubmitBarcodeAsync(barcode, _mode).ConfigureAwait(false);
