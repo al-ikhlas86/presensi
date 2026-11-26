@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Presensi Al-Ikhlas 86"
         Icon="Assets/app.ico"
-        Width="420" Height="170"
+        Width="440" Height="200"
         WindowStyle="None" ResizeMode="NoResize"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
@@ -13,7 +13,9 @@
             <TextBlock Text="Presensi Al-Ikhlas 86" FontSize="16" FontWeight="Bold" Foreground="White"
                        HorizontalAlignment="Center" Margin="0,0,0,14" />
             <TextBlock x:Name="StatusText" Text="Memeriksa pembaruan..." Foreground="#E5E7EB" FontSize="13"
-                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" MaxWidth="360" />
+                       TextWrapping="Wrap" TextAlignment="Center" HorizontalAlignment="Center" MaxWidth="380" />
+            <ProgressBar x:Name="Progress" IsIndeterminate="True" Height="6" Minimum="0" Maximum="100" Width="380" Margin="0,16,0,0"
+                         Background="#374151" Foreground="#22C55E" BorderThickness="0" />
         </StackPanel>
     </Border>
 </Window>

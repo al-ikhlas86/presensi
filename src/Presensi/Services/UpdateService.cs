@@ -35,6 +35,9 @@ public static class UpdateService
     // lagi tiap dicoba). Null/kosong = sembunyikan banner.
     public static event Action<string?>? StatusChanged;
 
+    // Kemajuan unduhan 0-100 (null = tahap tanpa persentase: memeriksa, memasang). Diamati jendela pembuka (UpdateCheckWindow) untuk bilah progres.
+    public static event Action<double?>? ProgressChanged;
+
 #if NET48
     private const string AssetName = "Presensi-net48.zip";
 #else
@@ -96,11 +99,39 @@ public static class UpdateService
             // Accept ini WAJIB - tanpa ini GitHub API balikin metadata JSON
             // asset-nya, BUKAN isi filenya.
             assetReq.Headers.Accept.ParseAdd("application/octet-stream");
-            using var assetResp = await http.SendAsync(assetReq).ConfigureAwait(false);
+            // ResponseHeadersRead + baca bertahap: persentase bisa ditampilkan, dan Timeout 30 dtk HttpClient hanya berlaku sampai header diterima
+            // (bukan seluruh 114 MB, yang di koneksi sekolah yang lambat bisa gagal di tengah jalan).
+            using var assetResp = await http.SendAsync(assetReq, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
             assetResp.EnsureSuccessStatusCode();
-            var zipBytes = await assetResp.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            var total = assetResp.Content.Headers.ContentLength ?? assetSize;
+            byte[] zipBytes;
+            using (var stream = await assetResp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+            using (var ms = new MemoryStream(total > 0 && total < int.MaxValue ? (int)total : 0))
+            {
+                var buf = new byte[81920];
+                long terbaca = 0;
+                var persenTerakhir = -1;
+                ProgressChanged?.Invoke(0);
+                while (true)
+                {
+                    // Macet 60 dtk tanpa satu byte pun = unduhan dianggap gagal (dicoba lagi di siklus berikutnya), bukan menggantung selamanya.
+                    using var macet = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(60));
+                    var n = await stream.ReadAsync(buf, 0, buf.Length, macet.Token).ConfigureAwait(false);
+                    if (n <= 0) break;
+                    ms.Write(buf, 0, n);
+                    terbaca += n;
+                    if (total <= 0) continue;
+                    var persen = (int)Math.Min(100, terbaca * 100 / total);
+                    if (persen == persenTerakhir) continue;
+                    persenTerakhir = persen;
+                    ProgressChanged?.Invoke(persen);
+                    StatusChanged?.Invoke($"Memperbarui ke versi {remote} - {persen}% ({terbaca / 1024.0 / 1024.0:F0} dari {total / 1024.0 / 1024.0:F0} MB) - JANGAN TUTUP APLIKASI INI sampai selesai...");
+                }
+                zipBytes = ms.ToArray();
+            }
+            ProgressChanged?.Invoke(null);
             Log.Info($"[Update] Unduhan selesai ({zipBytes.Length:N0} bytes). Menyiapkan pemasangan...");
-            StatusChanged?.Invoke("Update selesai diunduh - aplikasi akan tertutup sebentar lalu terbuka lagi otomatis...");
+            StatusChanged?.Invoke("Update selesai diunduh - memasang. Aplikasi akan tertutup sebentar lalu terbuka lagi otomatis...");
 
             ApplyAndRestart(zipBytes);
         }
@@ -113,6 +144,7 @@ public static class UpdateService
             // berikutnya (lihat App.xaml.cs). Banner disembunyikan lagi -
             // JANGAN dibiarkan nyangkut "sedang mengunduh" kalau ternyata gagal.
             StatusChanged?.Invoke(null);
+            ProgressChanged?.Invoke(null);
             Log.Error("[Update] Gagal cek/unduh update (diabaikan, aplikasi tetap jalan seperti biasa)", ex);
         }
     }

@@ -22,4 +22,11 @@ public partial class UpdateCheckWindow : Window
     {
         StatusText.Text = string.IsNullOrEmpty(text) ? "Memeriksa pembaruan..." : text;
     }
+
+    /// <summary>0-100 = persentase unduhan sungguhan; null = tahap tanpa persentase (memeriksa/memasang), bilah bergerak terus.</summary>
+    public void SetProgress(double? persen)
+    {
+        Progress.IsIndeterminate = persen is null;
+        if (persen is not null) Progress.Value = persen.Value;
+    }
 }

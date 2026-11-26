@@ -86,6 +86,8 @@ public partial class App : Application
 
         void OnStartupStatus(string? msg) => Dispatcher.Invoke(() => splash.SetStatus(msg));
         UpdateService.StatusChanged += OnStartupStatus;
+        void OnStartupProgress(double? persen) => Dispatcher.Invoke(() => splash.SetProgress(persen));
+        UpdateService.ProgressChanged += OnStartupProgress;
 
         // Lihat UpdateService.cs utk alasan ini ditulis sendiri (bukan lagi
         // AutoUpdater.NET.Official) & kenapa lewat GitHub API (bukan URL
@@ -99,6 +101,7 @@ public partial class App : Application
         // bawah ini tidak akan sempat berefek lagi (proses sudah menutup
         // diri). Kalau tidak ada update / gagal cek, lanjut normal ke sini.
         UpdateService.StatusChanged -= OnStartupStatus;
+        UpdateService.ProgressChanged -= OnStartupProgress;
         splash.Close();
 
         new MainWindow().Show();
