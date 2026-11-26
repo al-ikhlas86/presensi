@@ -82,7 +82,7 @@ public sealed class AppConfig
             {
                 var fresh = new AppConfig();
                 Save(fresh);
-                Log.Warn($"appsettings.json belum ada, dibuat baru dgn token KOSONG di {ConfigPath} - isi KioskToken sebelum presensi bisa berfungsi.");
+                Log.Info($"appsettings.json belum ada, dibuat baru di {ConfigPath}. Perangkat mendaftar sendiri ke server dan menunggu persetujuan Admin IT (tidak perlu mengisi token).");
                 return fresh;
             }
 
