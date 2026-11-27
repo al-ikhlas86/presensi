@@ -46,8 +46,12 @@ public static class UpdateService
     private const string ApiLatestReleaseUrl = "https://api.github.com/repos/al-ikhlas86/presensi/releases/latest";
     private const string ApiAssetUrlTemplate = "https://api.github.com/repos/al-ikhlas86/presensi/releases/assets/{0}";
 
+    // true = sesi ini jangan memeriksa update (aplikasi dibuka ulang helper setelah penyalinan gagal; jangan langsung mengunduh 114 MB lagi).
+    public static bool LewatiSesiIni { get; set; }
+
     public static async Task CheckAndApplyAsync(AppConfig config)
     {
+        if (LewatiSesiIni) return;
         try
         {
             var installed = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0, 0, 0);
@@ -181,18 +185,35 @@ public static class UpdateService
 
         var pid = Process.GetCurrentProcess().Id;
         var scriptPath = Path.Combine(Path.GetTempPath(), "presensi-update.bat");
+        // robocopy (BUKAN xcopy; /IS = tetap timpa berkas yang tampak sama, seperti xcopy /Y dulu): mengulang otomatis bila berkas masih terkunci
+        // (/R:15 /W:2 = sampai ~30 dtk per berkas) dan KODE KELUARNYA diperiksa (>= 8 = gagal). xcopy sebelumnya gagal diam-diam lalu aplikasi LAMA dibuka
+        // lagi tanpa ada yang tahu, dan tiap pembukaan mengunduh ulang 114 MB. Kini semua langkah dicatat ke update_helper.log; bila gagal, aplikasi lama
+        // dibuka dengan --update-gagal (sesi itu tidak langsung mengunduh ulang). Pola yang sama dengan Data Master/Keuangan.
         var script =
             "@echo off\r\n" +
+            "set \"LOGDIR=%LOCALAPPDATA%\\Presensi\\logs\"\r\n" +
+            "if not exist \"%LOGDIR%\" mkdir \"%LOGDIR%\"\r\n" +
+            "set \"LOG=%LOGDIR%\\update_helper.log\"\r\n" +
+            $"echo [%date% %time%] helper mulai, menunggu PID {pid} keluar >> \"%LOG%\"\r\n" +
             ":wait\r\n" +
             $"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL\r\n" +
             "if not errorlevel 1 (\r\n" +
             "    ping 127.0.0.1 -n 2 >NUL\r\n" +
             "    goto wait\r\n" +
             ")\r\n" +
-            $"xcopy \"{stagingDir}\\*\" \"{installDir}\\\" /Y /E /I >NUL\r\n" +
+            $"robocopy \"{stagingDir}\" \"{installDir}\" /E /IS /R:15 /W:2 /NFL /NDL /NJH /NJS /NP >> \"%LOG%\" 2>&1\r\n" +
+            "set \"RC=%ERRORLEVEL%\"\r\n" +
+            "echo [%date% %time%] robocopy kode keluar %RC% >> \"%LOG%\"\r\n" +
+            "if %RC% GEQ 8 goto gagal\r\n" +
             $"rmdir /S /Q \"{stagingDir}\"\r\n" +
+            "echo [%date% %time%] update diterapkan, membuka aplikasi baru >> \"%LOG%\"\r\n" +
             $"start \"\" \"{exePath}\"\r\n" +
-            "del \"%~f0\"\r\n";
+            "goto selesai\r\n" +
+            ":gagal\r\n" +
+            "echo [%date% %time%] PENYALINAN GAGAL, berkas masih terkunci - membuka aplikasi lama >> \"%LOG%\"\r\n" +
+            $"start \"\" \"{exePath}\" --update-gagal\r\n" +
+            ":selesai\r\n" +
+            "(goto) 2>NUL & del \"%~f0\"\r\n"; // idiom: helper menghapus dirinya sendiri tanpa pesan galat
         File.WriteAllText(scriptPath, script);
         Log.Info("[Update] Helper penutup+pasang disiapkan - aplikasi akan tertutup sebentar lalu terbuka lagi otomatis dgn versi baru.");
 

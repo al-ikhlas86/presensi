@@ -37,6 +37,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        UpdateService.LewatiSesiIni = e.Args.Contains("--update-gagal");
 
         // WAJIB diset SEBELUM menutup/membuka window apa pun - bawaan WPF
         // (OnLastWindowClose) memicu Shutdown() OTOMATIS begitu window
