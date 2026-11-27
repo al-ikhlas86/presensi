@@ -50,6 +50,11 @@ public partial class MainWindow : Window
     // lepas-colok sendiri seharian, bukan cuma soal nyambung sekali di awal.
     private readonly DispatcherTimer _scannerReconnectTimer = new() { Interval = TimeSpan.FromSeconds(15) };
 
+    // Scan kartu yang tertahan karena internet putus (disimpan di berkas lokal bersama waktu scan aslinya) dan pengirim ulangnya. Lihat AntreanOffline.
+    private readonly AntreanOffline _antrean = new();
+    private readonly DispatcherTimer _antreanTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private int _sedangKirimAntrean; // 0/1, dijaga Interlocked
+
     // Riwayat presensi live di panel kanan (diminta user 2026-09-01) - dibatasi
     // 100 baris terbaru, kiosk ini jalan berhari-hari tanpa restart jadi
     // daftarnya tidak boleh menumpuk tak terbatas (pola sama dgn Log.cs).
@@ -130,6 +135,9 @@ public partial class MainWindow : Window
         // supaya PC yang dimatikan/dibuka lagi TIDAK perlu klik "Scanner..." manual (diminta user 2026-09-01, diperkuat 2026-11-28).
         TryReconnectScannerIfNeeded();
         Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        UpdateAntreanChip();
+        _antreanTimer.Tick += async (_, _) => await KirimAntreanAsync();
+        _antreanTimer.Start();
         UpdateScannerStatus();
         _scannerReconnectTimer.Tick += (_, _) => TryReconnectScannerIfNeeded();
         _scannerReconnectTimer.Start();
@@ -519,9 +527,24 @@ public partial class MainWindow : Window
     {
         if (_penerimaFrameMentah != null) return; // dijeda selama pendaftaran wajah
         if (TahanBarcodeGanda(barcode)) return;
+        var waktuScan = DateTime.UtcNow; // waktu asli scan: dipakai server walau terkirimnya nanti (antrean offline)
+        var modeScan = _mode;
         try
         {
-            var result = await _api.SubmitBarcodeAsync(barcode, _mode).ConfigureAwait(false);
+            var result = await _api.SubmitBarcodeAsync(barcode, modeScan).ConfigureAwait(false);
+            if (result.GagalJaringan)
+            {
+                // Internet putus/server tidak terjangkau: scan disimpan dan dikirim otomatis nanti, BUKAN dibuang atau dianggap ditolak.
+                _antrean.Tambah(barcode, modeScan, waktuScan);
+                Log.Warn($"[Antrean] kartu {barcode} disimpan offline ({_antrean.Jumlah} menunggu)");
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    UpdateAntreanChip();
+                    ShowResultOverlay($"Kartu {barcode}", "Tersimpan (offline). Dikirim otomatis saat internet tersambung.", true);
+                    _sound.PlaySuccess();
+                }));
+                return;
+            }
             HandleAttendanceResult(result);
             if (!result.Success && string.IsNullOrEmpty(result.PersonName))
             {
@@ -534,6 +557,45 @@ public partial class MainWindow : Window
             Log.Error("Gagal mengirim barcode", ex);
             LupakanBarcode(barcode);
             Dispatcher.BeginInvoke(new Action(() => ShowResultOverlay("Gagal mengirim", "Periksa koneksi internet lalu scan kartu lagi.", false, gagal: true)));
+        }
+    }
+
+    private void UpdateAntreanChip()
+    {
+        var n = _antrean.Jumlah;
+        AntreanChip.Text = $"\u25CF Offline: {n} scan menunggu dikirim";
+        AntreanChipBorder.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>Mengirim ulang scan offline berurutan (tertua dulu) dengan waktu aslinya. Berhenti di kegagalan jaringan pertama; jawaban server apa pun (tercatat/ditolak) = selesai untuk entri itu.</summary>
+    private async Task KirimAntreanAsync()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _sedangKirimAntrean, 1) == 1) return;
+        try
+        {
+            if (_antrean.Jumlah == 0 || _api is MenungguPersetujuanClient) return;
+            _antrean.BuangKedaluwarsa();
+            for (var i = 0; i < 100; i++)
+            {
+                var entri = _antrean.Tertua();
+                if (entri == null) break;
+                var mode = entri.Mode == "pulang" ? AttendanceMode.Pulang : AttendanceMode.Masuk;
+                var hasil = await _api.SubmitBarcodeAsync(entri.Kode, mode, entri.WaktuUtc).ConfigureAwait(false);
+                if (hasil.GagalJaringan) break; // masih offline: urutan dipertahankan, coba lagi 30 dtk lagi
+                _antrean.Hapus(entri);
+                Log.Info(hasil.Success
+                    ? $"[Antrean] kartu {entri.Kode} ({entri.Mode}, {entri.WaktuUtc:u}) terkirim"
+                    : $"[Antrean] kartu {entri.Kode} ({entri.Mode}, {entri.WaktuUtc:u}) dijawab server: {hasil.Message} - dihapus dari antrean");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[Antrean] gagal mengirim ulang scan offline", ex);
+        }
+        finally
+        {
+            System.Threading.Interlocked.Exchange(ref _sedangKirimAntrean, 0);
+            Dispatcher.BeginInvoke(new Action(UpdateAntreanChip));
         }
     }
 
@@ -625,6 +687,7 @@ public partial class MainWindow : Window
         _perangkat.Dispose();
         _modeTimer.Stop();
         _scannerReconnectTimer.Stop();
+        _antreanTimer.Stop();
         Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         _resultOverlayTimer.Stop();
         _camera.Dispose();

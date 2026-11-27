@@ -218,6 +218,6 @@ public sealed class MenungguPersetujuanClient : IAttendanceApiClient
     public Task<AttendanceResult> IdentifyFaceAsync(byte[] jpegBytes, AttendanceMode mode, CancellationToken ct = default)
         => Task.FromResult(new AttendanceResult { Success = false, Message = _pesan() });
 
-    public Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, CancellationToken ct = default)
+    public Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, DateTime? scannedAtUtc = null, CancellationToken ct = default)
         => Task.FromResult(new AttendanceResult { Success = false, Message = _pesan() });
 }

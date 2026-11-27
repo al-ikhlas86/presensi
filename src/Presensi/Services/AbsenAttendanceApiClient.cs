@@ -41,10 +41,16 @@ public sealed class AbsenAttendanceApiClient : IAttendanceApiClient
         return await PostAsync("face-identify", payload, ct).ConfigureAwait(false);
     }
 
-    public async Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, CancellationToken ct = default)
+    // Scan kartu memakai batas waktu lebih pendek (8 dtk): saat internet putus tetapi Wi-Fi masih "tersambung", menunggu 15 dtk per kartu membuat antrean anak macet.
+    private static readonly TimeSpan BatasKartu = TimeSpan.FromSeconds(8);
+
+    public async Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, DateTime? scannedAtUtc = null, CancellationToken ct = default)
     {
-        var payload = new { identifier = barcode, mode = ModeToString(mode) };
-        return await PostAsync("checkin", payload, ct).ConfigureAwait(false);
+        var scannedAt = scannedAtUtc?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", System.Globalization.CultureInfo.InvariantCulture);
+        var payload = new { identifier = barcode, mode = ModeToString(mode), scanned_at = scannedAt };
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(BatasKartu);
+        return await PostAsync("checkin", payload, cts.Token).ConfigureAwait(false);
     }
 
     private static string ModeToString(AttendanceMode mode) => mode == AttendanceMode.Masuk ? "masuk" : "pulang";
@@ -62,6 +68,13 @@ public sealed class AbsenAttendanceApiClient : IAttendanceApiClient
             request.Headers.TryAddWithoutValidation("X-App-Version", AppVersionInfo.Current);
 
             using var response = await _http.SendAsync(request, ct).ConfigureAwait(false);
+            // Server sibuk/tidak tersedia, token ditolak sementara, atau dibatasi laju: bukan penolakan atas orangnya, jadi scan kartu boleh diantrekan dan dicoba lagi.
+            var kodeHttp = (int)response.StatusCode;
+            if (kodeHttp >= 500 || kodeHttp == 429 || kodeHttp == 408 || kodeHttp == 401)
+            {
+                Log.Warn($"[Kiosk] {path}: server belum bisa memproses (HTTP {kodeHttp})");
+                return new AttendanceResult { Success = false, GagalJaringan = true, Message = "Server belum bisa dihubungi. Coba lagi sebentar." };
+            }
             // ReadAsStringAsync() TANPA CancellationToken - overload dgn ct
             // cuma ada di .NET 5+, net48 tidak punya (beda BCL antar target).
             var body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
@@ -84,7 +97,7 @@ public sealed class AbsenAttendanceApiClient : IAttendanceApiClient
         catch (Exception ex)
         {
             Log.Error($"[Kiosk] Gagal memanggil {path}", ex);
-            return new AttendanceResult { Success = false, Message = "Tidak bisa menghubungi server. Cek koneksi internet." };
+            return new AttendanceResult { Success = false, GagalJaringan = true, Message = "Tidak bisa menghubungi server. Cek koneksi internet." };
         }
     }
 }

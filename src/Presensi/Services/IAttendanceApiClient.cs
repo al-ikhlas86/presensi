@@ -10,6 +10,9 @@ public sealed class AttendanceResult
     public bool Success { get; set; }
     public string? PersonName { get; set; }
     public string? Message { get; set; }
+
+    /// <summary>True = permintaan tidak sampai/ditunda server (offline, waktu habis, 5xx, 401, 429): scan kartu masuk antrean offline, BUKAN ditolak.</summary>
+    public bool GagalJaringan { get; set; }
 }
 
 /// <summary>
@@ -19,5 +22,6 @@ public sealed class AttendanceResult
 public interface IAttendanceApiClient
 {
     Task<AttendanceResult> IdentifyFaceAsync(byte[] jpegBytes, AttendanceMode mode, CancellationToken ct = default);
-    Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, CancellationToken ct = default);
+    /// <summary>scannedAtUtc diisi hanya saat mengirim ulang scan dari antrean offline (waktu scan asli); null = scan langsung.</summary>
+    Task<AttendanceResult> SubmitBarcodeAsync(string barcode, AttendanceMode mode, DateTime? scannedAtUtc = null, CancellationToken ct = default);
 }

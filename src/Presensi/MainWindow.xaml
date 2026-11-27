@@ -29,6 +29,10 @@
                 <Border x:Name="ScannerChipBorder" CornerRadius="10" Padding="10,3" Margin="16,4,0,0" VerticalAlignment="Center" Background="#374151">
                     <TextBlock x:Name="ScannerChip" FontSize="12" Foreground="White" />
                 </Border>
+                <Border x:Name="AntreanChipBorder" CornerRadius="10" Padding="10,3" Margin="8,4,0,0" VerticalAlignment="Center" Background="#B45309" Visibility="Collapsed"
+                        ToolTip="Scan kartu yang disimpan karena internet putus; dikirim otomatis begitu tersambung.">
+                    <TextBlock x:Name="AntreanChip" FontSize="12" Foreground="White" />
+                </Border>
                 <!-- Mode Masuk/Pulang OTOMATIS berdasar jam PC + jadwal di Pengaturan -
                      tidak ada lagi toggle manual (lihat ScheduleService.GetCurrentMode). -->
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right" VerticalAlignment="Center">
