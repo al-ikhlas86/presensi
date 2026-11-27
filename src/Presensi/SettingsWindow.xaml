@@ -29,6 +29,9 @@
 
         <CheckBox x:Name="ShowRiwayatPanelCheck" Content="Tampilkan panel &quot;Presensi Terbaru&quot; di kanan" Foreground="White" Margin="0,0,0,16" />
 
+        <CheckBox x:Name="PasangUpdateOtomatisCheck" Content="Pasang pembaruan otomatis saat kiosk sepi (10 menit tanpa presensi)" Foreground="White" Margin="0,0,0,4" />
+        <TextBlock Text="Dimatikan: muncul banner di atas layar, ketuk untuk mulai ulang; pembaruan juga terpasang sendiri saat Presensi dibuka lagi." Foreground="#9CA3AF" FontSize="11" TextWrapping="Wrap" Margin="22,0,0,16" />
+
         <TextBlock x:Name="ErrorText" Foreground="#F87171" Margin="0,0,0,8" Visibility="Collapsed" TextWrapping="Wrap" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

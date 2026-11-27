@@ -70,6 +70,12 @@ public sealed class AppConfig
     public bool ShowRiwayatPanel { get; set; } = true;
 
     /// <summary>
+    /// Pasang pembaruan yang sudah diunduh secara OTOMATIS saat kiosk sepi (10 menit tanpa presensi). BAWAAN NYALA karena kiosk tak berpenjaga (tidak ada yang bisa
+    /// mengklik restart). Dimatikan = banner "ketuk untuk mulai ulang"; pembaruan tetap terpasang sendiri saat Presensi dibuka lagi.
+    /// </summary>
+    public bool PasangUpdateOtomatis { get; set; } = true;
+
+    /// <summary>
     /// Fine-grained Personal Access Token GitHub, scope Contents:Read-only
     /// KHUSUS repo "presensi" - dipakai UpdateService.cs cek/unduh rilis
     /// terbaru lewat REST API krn repo ini privat (URL publik "releases/

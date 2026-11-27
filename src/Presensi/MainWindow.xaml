@@ -84,7 +84,7 @@
                          "tidak terjadi apa-apa" - unduhan hangus tiap kali. -->
                     <StackPanel VerticalAlignment="Top" HorizontalAlignment="Stretch">
                         <Border x:Name="UpdateBanner" HorizontalAlignment="Stretch"
-                                Background="#E6B45309" Padding="16,12" Visibility="Collapsed">
+                                Background="#E6B45309" Padding="16,12" Visibility="Collapsed" MouseLeftButtonUp="UpdateBanner_Klik">
                             <TextBlock x:Name="UpdateBannerText" Foreground="White" FontSize="15" FontWeight="Bold"
                                        HorizontalAlignment="Center" TextWrapping="Wrap" />
                         </Border>

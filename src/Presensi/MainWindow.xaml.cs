@@ -77,6 +77,13 @@ public partial class MainWindow : Window
     private DateTime _lastRiwayatAt = DateTime.MinValue;
     private static readonly TimeSpan RiwayatDedupWindow = TimeSpan.FromSeconds(30);
 
+    private bool _updateSiapKlik;
+
+    private void UpdateBanner_Klik(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_updateSiapKlik) Services.UpdateService.TerapkanSekarang();
+    }
+
     public MainWindow()
     {
         InitializeComponent();
@@ -124,7 +131,11 @@ public partial class MainWindow : Window
         // Pembaruan sudah diunduh lengkap: kiosk tak berpenjaga, jadi dipasang otomatis saat sepi (lihat App.xaml.cs), banner hanya memberi tahu.
         Services.UpdateService.PembaruanSiap += (versi) => Dispatcher.Invoke(() =>
         {
-            UpdateBannerText.Text = $"Pembaruan versi {versi} sudah diunduh - dipasang otomatis saat kiosk sepi (10 menit tanpa presensi) atau saat Presensi dibuka lagi.";
+            _updateSiapKlik = !AppConfig.Load().PasangUpdateOtomatis;
+            UpdateBanner.Cursor = _updateSiapKlik ? System.Windows.Input.Cursors.Hand : System.Windows.Input.Cursors.Arrow;
+            UpdateBannerText.Text = _updateSiapKlik
+                ? $"Pembaruan versi {versi} sudah diunduh - ketuk di sini untuk mulai ulang dan memasangnya (atau otomatis saat Presensi dibuka lagi)."
+                : $"Pembaruan versi {versi} sudah diunduh - dipasang otomatis saat kiosk sepi (10 menit tanpa presensi) atau saat Presensi dibuka lagi.";
             UpdateBanner.Visibility = Visibility.Visible;
         });
 

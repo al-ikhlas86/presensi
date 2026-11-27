@@ -104,6 +104,7 @@ public partial class App : Application
         _sepiTimer.Tick += (_, _) =>
         {
             foreach (var w in Windows) if (w is DaftarWajahWindow) return;
+            if (!AppConfig.Load().PasangUpdateOtomatis) return; // dimatikan di Pengaturan: pengguna memilih lewat banner
             if (UpdateService.SiapDanSepi(TimeSpan.FromMinutes(10))) UpdateService.TerapkanSekarang();
         };
         _sepiTimer.Start();
