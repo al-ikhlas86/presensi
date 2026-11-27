@@ -14,6 +14,7 @@ public partial class App : Application
     // manual dari siapa pun.
     private static readonly TimeSpan UpdateCheckInterval = TimeSpan.FromHours(6);
     private readonly DispatcherTimer _updateTimer = new() { Interval = UpdateCheckInterval };
+    private readonly DispatcherTimer _sepiTimer = new() { Interval = TimeSpan.FromMinutes(1) };
 
     // Mutex bernama - cegah 2 proses Presensi.exe jalan BERSAMAAN. Terbukti
     // nyata terjadi 2026-09-01 (log: 2x "Kamera index 0 dimulai" persis di
@@ -72,47 +73,41 @@ public partial class App : Application
         _ = RunStartupSequenceAsync();
     }
 
-    // Popup kecil dulu (diminta user 2026-09-01) - SEBELUMNYA cek update
-    // jalan di background SETELAH MainWindow (kamera) langsung tampil, jadi
-    // kalau app dibuka SAAT ada update yang lagi diunduh (mis. sesi
-    // sebelumnya ditutup di tengah unduhan, hangus, dicoba lagi dari nol),
-    // yang kelihatan duluan langsung jendela kamera besar tanpa penjelasan.
-    // Sekarang: popup kecil "Memeriksa/Memperbarui..." tampil DULU, MainWindow
-    // baru dibuka SETELAH cek/unduh selesai (atau langsung kalau tidak ada
-    // update - biasanya cuma sekejap, GitHub API response cepat).
+    // Urutan buka (dirancang ulang 2026-11-27): kiosk TIDAK lagi ditahan menunggu unduhan (di jaringan sekolah yang lambat itu berarti presensi mati
+    // berjam-jam). Hanya pembaruan yang SUDAH diunduh lengkap yang dipasang saat buka (cepat, tanpa jaringan); selain itu kamera langsung jalan dan
+    // pemeriksaan/unduhan berlangsung di latar belakang (lihat UpdateService.cs).
     private async System.Threading.Tasks.Task RunStartupSequenceAsync()
     {
-        var splash = new UpdateCheckWindow();
-        splash.Show();
-
-        void OnStartupStatus(string? msg) => Dispatcher.Invoke(() => splash.SetStatus(msg));
-        UpdateService.StatusChanged += OnStartupStatus;
-        void OnStartupProgress(double? persen) => Dispatcher.Invoke(() => splash.SetProgress(persen));
-        UpdateService.ProgressChanged += OnStartupProgress;
-
-        // Lihat UpdateService.cs utk alasan ini ditulis sendiri (bukan lagi
-        // AutoUpdater.NET.Official) & kenapa lewat GitHub API (bukan URL
-        // publik biasa - repo ini privat). AppConfig.Load() dibaca ulang tiap
-        // siklus (bukan cache 1x) supaya GithubToken yang baru diisi/diganti
-        // manual di appsettings.json langsung kepakai tanpa restart app.
-        await UpdateService.CheckAndApplyAsync(AppConfig.Load());
-
-        // Kalau update BERHASIL diterapkan, ApplyAndRestart() DI DALAM
-        // CheckAndApplyAsync SUDAH memanggil Shutdown() sendiri - baris di
-        // bawah ini tidak akan sempat berefek lagi (proses sudah menutup
-        // diri). Kalau tidak ada update / gagal cek, lanjut normal ke sini.
-        UpdateService.StatusChanged -= OnStartupStatus;
-        UpdateService.ProgressChanged -= OnStartupProgress;
-        splash.Close();
+        if (!UpdateService.LewatiSesiIni && UpdateService.VersiSiap() is { } versiSiap)
+        {
+            var splash = new UpdateCheckWindow();
+            splash.Show();
+            splash.SetStatus($"Memasang pembaruan {versiSiap} yang sudah diunduh - aplikasi akan terbuka lagi otomatis...");
+            splash.SetProgress(null);
+            if (UpdateService.TerapkanBilaSiap()) return; // Shutdown() sudah dipanggil di dalam - jangan lanjut apa pun lagi
+            splash.Close();
+        }
 
         new MainWindow().Show();
 
-        // Kiosk bisa jalan berhari-hari tanpa restart - cek sekali saat buka
-        // SAJA tidak cukup, jadi diulang berkala. Beda dari cek awal di atas
-        // (popup kecil), pengulangan ini TIDAK menutupi kamera - cukup
-        // banner kecil (lihat MainWindow.xaml.cs) krn kiosk sedang dipakai.
-        _updateTimer.Tick += (_, _) => _ = System.Threading.Tasks.Task.Run(() => UpdateService.CheckAndApplyAsync(AppConfig.Load()));
+        // Kiosk bisa jalan berhari-hari tanpa restart: cek 20 detik setelah buka, lalu berkala. Unduhan di latar belakang, banner kecil di MainWindow.
+        _updateTimer.Tick += (_, _) => _ = System.Threading.Tasks.Task.Run(() => UpdateService.PeriksaDanSiapkanAsync(AppConfig.Load()));
         _updateTimer.Start();
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            await System.Threading.Tasks.Task.Delay(TimeSpan.FromSeconds(20)).ConfigureAwait(false);
+            await UpdateService.PeriksaDanSiapkanAsync(AppConfig.Load()).ConfigureAwait(false);
+        });
+
+        // Kiosk tak berpenjaga (tidak ada yang bisa mengklik "restart"): pembaruan yang sudah siap dipasang otomatis saat kiosk SEPI (tanpa presensi 10 menit)
+        // dan jendela daftar wajah tertutup; jika kiosk dimatikan malam hari, dipasang saat dibuka berikutnya (bagian atas).
+        _sepiTimer.Tick += (_, _) =>
+        {
+            foreach (var w in Windows) if (w is DaftarWajahWindow) return;
+            if (UpdateService.SiapDanSepi(TimeSpan.FromMinutes(10))) UpdateService.TerapkanSekarang();
+        };
+        _sepiTimer.Start();
+        await System.Threading.Tasks.Task.CompletedTask;
     }
 
     protected override void OnExit(ExitEventArgs e)

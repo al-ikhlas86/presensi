@@ -121,6 +121,13 @@ public partial class MainWindow : Window
             }
         });
 
+        // Pembaruan sudah diunduh lengkap: kiosk tak berpenjaga, jadi dipasang otomatis saat sepi (lihat App.xaml.cs), banner hanya memberi tahu.
+        Services.UpdateService.PembaruanSiap += (versi) => Dispatcher.Invoke(() =>
+        {
+            UpdateBannerText.Text = $"Pembaruan versi {versi} sudah diunduh - dipasang otomatis saat kiosk sepi (10 menit tanpa presensi) atau saat Presensi dibuka lagi.";
+            UpdateBanner.Visibility = Visibility.Visible;
+        });
+
         _camera.PreviewFrameCaptured += OnPreviewFrameCaptured;
         _camera.RawFrameCaptured += OnRawFrameCaptured;
         _camera.CameraError += (_, msg) => Dispatcher.Invoke(() => StatusText.Text = "Kamera bermasalah: " + msg);
@@ -287,6 +294,7 @@ public partial class MainWindow : Window
         _lastRiwayatKey = key;
         _lastRiwayatAt = DateTime.UtcNow;
 
+        Services.UpdateService.CatatAktivitas(); // kiosk sibuk: pembaruan yang siap menunggu sepi
         _riwayatPresensi.Insert(0, $"{nama} telah melakukan presensi {jenis} - {DateTime.Now:HH:mm:ss}");
         while (_riwayatPresensi.Count > MaxRiwayat) _riwayatPresensi.RemoveAt(_riwayatPresensi.Count - 1);
     }
