@@ -25,18 +25,10 @@ namespace Presensi;
 /// </summary>
 public partial class DaftarWajahWindow : Window
 {
-    private const double YawTarget = 12;
-    private const double UkuranMin = 120;
-    private const double BlurMin = 30;
     private static readonly TimeSpan JedaAnalisis = TimeSpan.FromMilliseconds(600);
     private static readonly TimeSpan JedaSetelahSampel = TimeSpan.FromMilliseconds(900);
-    private static readonly TimeSpan TahanKondisi = TimeSpan.FromMilliseconds(500);
+    private const double TahanMs = 700;    // posisi pas harus bertahan sekian ms (penilaian: Services/GeometriWajah)
     private const int TotalFoto = 3;       // foto depan per orang: front_1..front_3
-    private const double PusatXToleransi = 0.13;
-    private const double PusatYTarget = 0.46;
-    private const double PusatYToleransi = 0.15;
-    private const double LebarMin = 0.2;   // lebar wajah / lebar frame: di bawah ini terlalu jauh
-    private const double LebarMaks = 0.52; // di atas ini terlalu dekat
     private const int JumlahTik = 60;
 
     private const string PetunjukAwal = "Taruh wajah di dalam lingkaran";
@@ -51,7 +43,9 @@ public partial class DaftarWajahWindow : Window
     private volatile bool _tungguKosong;   // menunggu kamera kosong (orang sebelumnya menyingkir) sebelum orang berikutnya dimulai
     private int _sibuk;                    // 0/1: satu analisis/pengiriman sekaligus
     private DateTime _terakhirAnalisis = DateTime.MinValue;
-    private DateTime _kondisiSejak = DateTime.MinValue;
+    private readonly PenahanPosisi _penahan = new(TahanMs);
+    private volatile int _kotakW;          // ukuran kanvas pratinjau (diperbarui di UI thread, dibaca thread analisis)
+    private volatile int _kotakH;
     private DateTime _jedaHingga = DateTime.MinValue;
 
     public DaftarWajahWindow(WajahApiClient api)
@@ -77,10 +71,10 @@ public partial class DaftarWajahWindow : Window
         if (Interlocked.CompareExchange(ref _sibuk, 1, 0) != 0) return;
         _terakhirAnalisis = sekarang;
         Cv2.ImEncode(".jpg", frame, out byte[] jpeg);
-        _ = ProsesAsync(jpeg);
+        _ = ProsesAsync(jpeg, frame.Width, frame.Height);
     }
 
-    private async Task ProsesAsync(byte[] jpeg)
+    private async Task ProsesAsync(byte[] jpeg, int frameW, int frameH)
     {
         try
         {
@@ -90,42 +84,28 @@ public partial class DaftarWajahWindow : Window
 
             var analisis = await _api.AnalisisAsync(jpeg).ConfigureAwait(false);
             if (!_aktif || _tertutup) return;
-            if (!analisis.Berhasil || analisis.Data is null) { _kondisiSejak = DateTime.MinValue; Tampil(analisis.Pesan ?? "Gagal menghubungi server, mencoba lagi...", 0); return; }
+            if (!analisis.Berhasil || analisis.Data is null) { _penahan.Reset(); Tampil(analisis.Pesan ?? "Gagal menghubungi server, mencoba lagi...", 0); return; }
             var a = analisis.Data;
 
             // Orang sebelumnya baru selesai: tunggu kamera kosong dulu, supaya wajahnya tidak terdaftar atas nama orang berikutnya.
             if (_tungguKosong)
             {
-                _kondisiSejak = DateTime.MinValue;
+                _penahan.Reset();
                 if (a.WajahTerdeteksi) { Tampil($"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera.", 0); return; }
                 _tungguKosong = false;
                 Tampil($"{orang.Nama}, silakan maju - {PetunjukAwal.ToLowerInvariant()}", 0);
                 return;
             }
 
-            if (!a.WajahTerdeteksi) { _kondisiSejak = DateTime.MinValue; Tampil("Wajah belum terlihat - masuk ke lingkaran", 0); return; }
-            if (a.JumlahWajah > 1) { _kondisiSejak = DateTime.MinValue; Tampil("Hanya satu orang di dalam lingkaran", 0); return; }
+            if (!a.WajahTerdeteksi) { _penahan.Reset(); Tampil("Wajah belum terlihat - masuk ke lingkaran", 0); return; }
+            if (a.JumlahWajah > 1) { _penahan.Reset(); Tampil("Hanya satu orang di dalam lingkaran", 0); return; }
 
-            // Satu petunjuk paling penting dulu (ukuran -> letak -> hadap -> tajam). Kamera kiosk tidak diuji arah cerminnya, jadi geser horizontal netral.
-            string? saran = null;
-            if (a.UkuranWajah < UkuranMin || (a.Lebar is { } lb && lb < LebarMin)) saran = "Dekatkan wajah";
-            else if (a.Lebar is { } lb2 && lb2 > LebarMaks) saran = "Mundur sedikit";
-            else if (a.Cx is { } x && Math.Abs(x - 0.5) > PusatXToleransi) saran = "Pusatkan wajah di dalam lingkaran";
-            else if (a.Cy is { } y && y < PusatYTarget - PusatYToleransi) saran = "Turunkan sedikit";
-            else if (a.Cy is { } y2 && y2 > PusatYTarget + PusatYToleransi) saran = "Naikkan sedikit";
-            else if (Math.Abs(a.Yaw) > YawTarget) saran = "Hadap lurus ke kamera";
-            else if (a.Blur is { } bl && bl < BlurMin) saran = "Diam sebentar";
-            if (saran is not null)
-            {
-                _kondisiSejak = DateTime.MinValue;
-                Tampil(saran, 0);
-                return;
-            }
-
-            if (_kondisiSejak == DateTime.MinValue) { _kondisiSejak = DateTime.UtcNow; Tampil("Tahan posisi...", 0.05); return; }
-            var lama = DateTime.UtcNow - _kondisiSejak;
-            if (lama < TahanKondisi) { Tampil("Tahan posisi...", Math.Min(1, lama.TotalMilliseconds / TahanKondisi.TotalMilliseconds)); return; }
-            _kondisiSejak = DateTime.MinValue;
+            // Letak di lingkaran dinilai di koordinat TAMPILAN (GeometriWajah), hadap/dongak/miring dari pose 3D, lalu ditahan (tidak buyar karena satu frame buruk).
+            var saran = GeometriWajah.Nilai(a, frameW, frameH, _kotakW, _kotakH);
+            var (isi, siap) = _penahan.Catat(saran is null, DateTime.UtcNow);
+            if (saran is not null) { Tampil(saran, isi); return; }
+            if (!siap) { Tampil("Tahan posisi...", isi); return; }
+            _penahan.Reset();
 
             var kirim = await _api.KirimSampelAsync(jenis, orang.Id, "front", _langkah + 1, jpeg).ConfigureAwait(false);
             _jedaHingga = DateTime.UtcNow + JedaSetelahSampel;
@@ -173,7 +153,12 @@ public partial class DaftarWajahWindow : Window
     private double _cincinProgres;
     private string? _cincinPetunjuk;
 
-    private void CincinCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => GambarCincin(_cincinProgres, _cincinPetunjuk);
+    private void CincinCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        _kotakW = (int)CincinCanvas.ActualWidth;
+        _kotakH = (int)CincinCanvas.ActualHeight;
+        GambarCincin(_cincinProgres, _cincinPetunjuk);
+    }
 
     private void GambarCincin(double progres, string? petunjuk)
     {
@@ -267,7 +252,7 @@ public partial class DaftarWajahWindow : Window
         _orangTerakhir = kunci;
         _orang = orang;
         _langkah = 0;
-        _kondisiSejak = DateTime.MinValue;
+        _penahan.Reset();
         _jedaHingga = DateTime.MinValue;
         KelompokCombo.IsEnabled = false;
         OrangList.IsEnabled = false;

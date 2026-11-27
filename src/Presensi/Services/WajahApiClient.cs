@@ -59,6 +59,11 @@ public sealed class AnalisisWajah
     public double? Cx { get; set; }
     public double? Cy { get; set; }
     public double? Lebar { get; set; }
+    /// <summary>Pose 3D InsightFace (derajat) dan kecerahan; null = server lama belum mengirim.</summary>
+    public double? PoseYaw { get; set; }
+    public double? PosePitch { get; set; }
+    public double? PoseRoll { get; set; }
+    public double? Brightness { get; set; }
 }
 
 /// <summary>
@@ -125,6 +130,10 @@ public sealed class WajahApiClient
             a.Cx = Desimal(d, "cx");
             a.Cy = Desimal(d, "cy");
             a.Lebar = Desimal(d, "w");
+            a.PoseYaw = Desimal(d, "pose_yaw");
+            a.PosePitch = Desimal(d, "pose_pitch");
+            a.PoseRoll = Desimal(d, "pose_roll");
+            a.Brightness = Desimal(d, "brightness");
         }
         return new HasilDaftar<AnalisisWajah> { Berhasil = true, Data = a };
     }
