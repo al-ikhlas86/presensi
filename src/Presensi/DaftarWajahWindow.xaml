@@ -17,10 +17,13 @@
         <DockPanel Grid.Column="0" Margin="0,0,16,0">
             <TextBlock x:Name="PetunjukText" DockPanel.Dock="Bottom" Margin="0,12,0,0" Foreground="White" FontSize="20" FontWeight="SemiBold" TextWrapping="Wrap"
                        Text="Pilih kelompok dan orang, lalu tekan Mulai." />
-            <TextBlock x:Name="YawText" DockPanel.Dock="Bottom" Margin="0,8,0,0" Foreground="#AAAAAA" FontSize="13" />
             <TextBlock x:Name="LangkahText" DockPanel.Dock="Bottom" Margin="0,12,0,0" Foreground="#4ADE80" FontSize="14" />
             <Border Background="Black" CornerRadius="6">
-                <Image x:Name="KameraImage" Stretch="Uniform" />
+                <Grid>
+                    <Image x:Name="KameraImage" Stretch="Uniform" />
+                    <!-- Lingkaran + cincin progres (digambar di code-behind): wajah cukup masuk lingkaran, cincin terisi hijau -->
+                    <Canvas x:Name="CincinCanvas" IsHitTestVisible="False" ClipToBounds="True" SizeChanged="CincinCanvas_SizeChanged" />
+                </Grid>
             </Border>
         </DockPanel>
 

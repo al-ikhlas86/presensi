@@ -4,7 +4,9 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 using OpenCvSharp;
 using Presensi.Logging;
 using Presensi.Services;
@@ -13,10 +15,11 @@ using Window = System.Windows.Window;
 namespace Presensi;
 
 /// <summary>
-/// Pendaftaran wajah massal di kiosk: petugas memilih kelompok (kelas siswa, guru, atau pegawai), lalu mendaftarkan orangnya satu per satu (tiga sudut: depan, kiri, kanan).
+/// Pendaftaran wajah massal di kiosk: petugas memilih kelompok (kelas siswa, guru, atau pegawai), lalu mendaftarkan orangnya satu per satu. Gaya CINCIN (2026-11-27):
+/// orang cukup menaruh wajah di dalam lingkaran, tiga foto depan (front_1..front_3) diambil otomatis dan cincin terisi hijau; tidak ada lagi tengok kiri/kanan.
 /// Mode "lanjut otomatis": begitu satu orang lengkap, orang berikutnya (urut abjad, yang sudah lengkap dilewati) langsung dimulai tanpa klik; sebelum itu orang sebelumnya
-/// harus menyingkir dari kamera supaya wajahnya tidak ikut terdaftar sebagai orang berikutnya. Ambang kualitas PERSIS sama dengan pendaftaran lewat HP (yaw 12 derajat,
-/// wajah >= 120 px, blur >= 30, tahan 200 ms); validasi akhir tetap di server. Frame datang dari MainWindow (thread kamera) lewat <see cref="TerimaFrameMentah"/>;
+/// harus menyingkir dari kamera supaya wajahnya tidak ikut terdaftar sebagai orang berikutnya. Ambang kualitas PERSIS sama dengan pendaftaran lewat HP dan web (yaw 12 derajat,
+/// wajah >= 120 px, blur >= 30, lalu letak/ukuran di lingkaran dan ditahan sebentar); validasi akhir tetap di server. Frame datang dari MainWindow (thread kamera) lewat <see cref="TerimaFrameMentah"/>;
 /// semua pembaruan UI lewat Dispatcher.
 /// </summary>
 public partial class DaftarWajahWindow : Window
@@ -25,21 +28,23 @@ public partial class DaftarWajahWindow : Window
     private const double UkuranMin = 120;
     private const double BlurMin = 30;
     private static readonly TimeSpan JedaAnalisis = TimeSpan.FromMilliseconds(600);
-    private static readonly TimeSpan JedaSetelahSampel = TimeSpan.FromMilliseconds(800);
-    private static readonly TimeSpan TahanKondisi = TimeSpan.FromMilliseconds(200);
+    private static readonly TimeSpan JedaSetelahSampel = TimeSpan.FromMilliseconds(900);
+    private static readonly TimeSpan TahanKondisi = TimeSpan.FromMilliseconds(500);
+    private const int TotalFoto = 3;       // foto depan per orang: front_1..front_3
+    private const double PusatXToleransi = 0.13;
+    private const double PusatYTarget = 0.46;
+    private const double PusatYToleransi = 0.15;
+    private const double LebarMin = 0.2;   // lebar wajah / lebar frame: di bawah ini terlalu jauh
+    private const double LebarMaks = 0.52; // di atas ini terlalu dekat
+    private const int JumlahTik = 60;
 
-    private static readonly (string Sudut, string Petunjuk)[] Langkah =
-    {
-        ("front", "Hadap lurus ke kamera"),
-        ("left", "Tengok sedikit ke kiri"),
-        ("right", "Tengok sedikit ke kanan"),
-    };
+    private const string PetunjukAwal = "Taruh wajah di dalam lingkaran";
 
     private readonly WajahApiClient _api;
     private OrangWajah? _orang;            // orang yang sedang didaftarkan (diatur di UI thread sebelum _aktif = true)
     private string _jenis = "siswa";       // jenis kelompok yang sedang dikerjakan: siswa | guru | pegawai
     private string? _orangTerakhir;        // "jenis:id" orang yang terakhir dimulai; berganti orang = wajib ada jeda kosong
-    private int _langkah;                  // indeks Langkah berikutnya
+    private int _langkah;                  // jumlah foto yang sudah diterima untuk orang ini (0..TotalFoto)
     private volatile bool _aktif;
     private volatile bool _tertutup;
     private volatile bool _tungguKosong;   // menunggu kamera kosong (orang sebelumnya menyingkir) sebelum orang berikutnya dimulai
@@ -80,63 +85,64 @@ public partial class DaftarWajahWindow : Window
         {
             var orang = _orang;
             var jenis = _jenis;
-            if (orang == null || _langkah >= Langkah.Length) return;
-            var (sudut, petunjuk) = Langkah[_langkah];
+            if (orang == null || _langkah >= TotalFoto) return;
 
             var analisis = await _api.AnalisisAsync(jpeg).ConfigureAwait(false);
             if (!_aktif || _tertutup) return;
-            if (!analisis.Berhasil || analisis.Data is null) { _kondisiSejak = DateTime.MinValue; Tampil(analisis.Pesan ?? "Gagal menghubungi server, mencoba lagi...", null); return; }
+            if (!analisis.Berhasil || analisis.Data is null) { _kondisiSejak = DateTime.MinValue; Tampil(analisis.Pesan ?? "Gagal menghubungi server, mencoba lagi...", 0); return; }
             var a = analisis.Data;
 
             // Orang sebelumnya baru selesai: tunggu kamera kosong dulu, supaya wajahnya tidak terdaftar atas nama orang berikutnya.
             if (_tungguKosong)
             {
                 _kondisiSejak = DateTime.MinValue;
-                if (a.WajahTerdeteksi) { Tampil($"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera.", null); return; }
+                if (a.WajahTerdeteksi) { Tampil($"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera.", 0); return; }
                 _tungguKosong = false;
-                Tampil($"{orang.Nama}, silakan maju - {petunjuk}", null);
+                Tampil($"{orang.Nama}, silakan maju - {PetunjukAwal.ToLowerInvariant()}", 0);
                 return;
             }
 
-            if (!a.WajahTerdeteksi) { _kondisiSejak = DateTime.MinValue; Tampil("Wajah tidak terdeteksi - posisikan di tengah bingkai", null); return; }
-            if (a.JumlahWajah > 1) { _kondisiSejak = DateTime.MinValue; Tampil("Terdeteksi lebih dari 1 wajah - hanya satu orang di depan kamera", null); return; }
+            if (!a.WajahTerdeteksi) { _kondisiSejak = DateTime.MinValue; Tampil("Wajah belum terlihat - masuk ke lingkaran", 0); return; }
+            if (a.JumlahWajah > 1) { _kondisiSejak = DateTime.MinValue; Tampil("Hanya satu orang di dalam lingkaran", 0); return; }
 
-            var sudutOk = sudut == "front" ? Math.Abs(a.Yaw) <= YawTarget : sudut == "left" ? a.Yaw <= -YawTarget : a.Yaw >= YawTarget;
-            var ukuranOk = a.UkuranWajah >= UkuranMin;
-            var blurOk = a.Blur is null || a.Blur >= BlurMin;
-            if (!(sudutOk && ukuranOk && blurOk))
+            // Satu petunjuk paling penting dulu (ukuran -> letak -> hadap -> tajam). Kamera kiosk tidak diuji arah cerminnya, jadi geser horizontal netral.
+            string? saran = null;
+            if (a.UkuranWajah < UkuranMin || (a.Lebar is { } lb && lb < LebarMin)) saran = "Dekatkan wajah";
+            else if (a.Lebar is { } lb2 && lb2 > LebarMaks) saran = "Mundur sedikit";
+            else if (a.Cx is { } x && Math.Abs(x - 0.5) > PusatXToleransi) saran = "Pusatkan wajah di dalam lingkaran";
+            else if (a.Cy is { } y && y < PusatYTarget - PusatYToleransi) saran = "Turunkan sedikit";
+            else if (a.Cy is { } y2 && y2 > PusatYTarget + PusatYToleransi) saran = "Naikkan sedikit";
+            else if (Math.Abs(a.Yaw) > YawTarget) saran = "Hadap lurus ke kamera";
+            else if (a.Blur is { } bl && bl < BlurMin) saran = "Diam sebentar";
+            if (saran is not null)
             {
                 _kondisiSejak = DateTime.MinValue;
-                var saran = new List<string>();
-                if (!sudutOk) saran.Add(petunjuk);
-                if (!ukuranOk) saran.Add("Dekatkan wajah");
-                if (!blurOk) saran.Add("Diam sebentar");
-                Tampil(string.Join(" • ", saran), a.Yaw);
+                Tampil(saran, 0);
                 return;
             }
 
-            Tampil("Tahan posisi...", a.Yaw);
-            if (_kondisiSejak == DateTime.MinValue) { _kondisiSejak = DateTime.UtcNow; return; }
-            if (DateTime.UtcNow - _kondisiSejak < TahanKondisi) return;
+            if (_kondisiSejak == DateTime.MinValue) { _kondisiSejak = DateTime.UtcNow; Tampil("Tahan posisi...", 0.05); return; }
+            var lama = DateTime.UtcNow - _kondisiSejak;
+            if (lama < TahanKondisi) { Tampil("Tahan posisi...", Math.Min(1, lama.TotalMilliseconds / TahanKondisi.TotalMilliseconds)); return; }
             _kondisiSejak = DateTime.MinValue;
 
-            var kirim = await _api.KirimSampelAsync(jenis, orang.Id, sudut, jpeg).ConfigureAwait(false);
+            var kirim = await _api.KirimSampelAsync(jenis, orang.Id, "front", _langkah + 1, jpeg).ConfigureAwait(false);
             _jedaHingga = DateTime.UtcNow + JedaSetelahSampel;
             if (!_aktif || _tertutup) return;
             if (!kirim.Berhasil)
             {
-                Tampil("Sampel ditolak: " + (kirim.Pesan ?? "coba lagi") + " - ulangi posisi", a.Yaw);
+                Tampil("Foto ditolak: " + (kirim.Pesan ?? "coba lagi") + " - ulangi posisi", 0);
                 return;
             }
             _langkah++;
-            if (_langkah >= Langkah.Length)
+            if (_langkah >= TotalFoto)
             {
                 _aktif = false;
                 await await Dispatcher.InvokeAsync(() => OrangSelesaiAsync(orang));
             }
             else
             {
-                Tampil("Sampel diterima. Berikutnya: " + Langkah[_langkah].Petunjuk, null);
+                Tampil($"Bagus! Foto {_langkah} dari {TotalFoto} tersimpan. Tetap di lingkaran.", 0);
             }
         }
         catch (Exception ex)
@@ -149,15 +155,59 @@ public partial class DaftarWajahWindow : Window
         }
     }
 
-    private void Tampil(string petunjuk, double? yaw)
+    /// <summary>Petunjuk + kemajuan menahan posisi (0..1) untuk foto berikutnya; cincin = foto tersimpan + kemajuan tahan.</summary>
+    private void Tampil(string petunjuk, double tahan)
     {
         if (_tertutup) return;
         Dispatcher.BeginInvoke(() =>
         {
             PetunjukText.Text = petunjuk;
-            YawText.Text = yaw is null ? "" : $"Sudut kepala: {yaw:0}°";
-            LangkahText.Text = _orang is null || !_aktif ? "" : $"{_orang.Nama} - langkah {Math.Min(_langkah + 1, Langkah.Length)} dari {Langkah.Length}";
+            LangkahText.Text = _orang is null || !_aktif ? "" : $"{_orang.Nama} - foto {Math.Min(_langkah + 1, TotalFoto)} dari {TotalFoto}";
+            GambarCincin(_aktif ? (_langkah + tahan) / TotalFoto : 0, petunjuk);
         });
+    }
+
+    // ---- lingkaran + cincin ----
+
+    private double _cincinProgres;
+    private string? _cincinPetunjuk;
+
+    private void CincinCanvas_SizeChanged(object sender, SizeChangedEventArgs e) => GambarCincin(_cincinProgres, _cincinPetunjuk);
+
+    private void GambarCincin(double progres, string? petunjuk)
+    {
+        _cincinProgres = progres;
+        _cincinPetunjuk = petunjuk;
+        var w = CincinCanvas.ActualWidth;
+        var h = CincinCanvas.ActualHeight;
+        CincinCanvas.Children.Clear();
+        if (!_aktif || w < 50 || h < 50) return;
+
+        var cx = w / 2;
+        var cy = h * 0.46;
+        var r = Math.Min(w, h) * 0.36;
+        var terisi = (int)Math.Round(Math.Max(0, Math.Min(1, progres)) * JumlahTik);
+        // Warna lingkaran: hijau bila posisi sedang bagus/ditahan, kuning bila ada saran.
+        var bagus = petunjuk is not null && (petunjuk.StartsWith("Tahan") || petunjuk.StartsWith("Bagus"));
+        var warna = new SolidColorBrush(bagus ? Color.FromRgb(0x22, 0xC5, 0x5E) : Color.FromRgb(0xF5, 0x9E, 0x0B));
+
+        var lingkar = new Ellipse { Width = r * 2, Height = r * 2, Stroke = warna, StrokeThickness = 3 };
+        Canvas.SetLeft(lingkar, cx - r);
+        Canvas.SetTop(lingkar, cy - r);
+        CincinCanvas.Children.Add(lingkar);
+
+        var hijau = new SolidColorBrush(Color.FromRgb(0x22, 0xC5, 0x5E));
+        var abu = new SolidColorBrush(Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF));
+        for (var i = 0; i < JumlahTik; i++)
+        {
+            var sudut = i / (double)JumlahTik * Math.PI * 2 - Math.PI / 2;
+            CincinCanvas.Children.Add(new Line
+            {
+                X1 = cx + Math.Cos(sudut) * (r + 8), Y1 = cy + Math.Sin(sudut) * (r + 8),
+                X2 = cx + Math.Cos(sudut) * (r + 20), Y2 = cy + Math.Sin(sudut) * (r + 20),
+                Stroke = i < terisi ? hijau : abu, StrokeThickness = 3, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+            });
+        }
     }
 
     // ---- daftar kelompok / orang ----
@@ -222,10 +272,10 @@ public partial class DaftarWajahWindow : Window
         OrangList.IsEnabled = false;
         MulaiButton.IsEnabled = false;
         BerhentiButton.IsEnabled = true;
-        PetunjukText.Text = _tungguKosong ? $"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera." : Langkah[0].Petunjuk;
-        LangkahText.Text = $"{orang.Nama} - langkah 1 dari {Langkah.Length}";
-        YawText.Text = "";
+        PetunjukText.Text = _tungguKosong ? $"Menunggu {orang.Nama} maju. Orang sebelumnya silakan menyingkir dari kamera." : PetunjukAwal;
+        LangkahText.Text = $"{orang.Nama} - foto 1 dari {TotalFoto}";
         _aktif = true; // terakhir: thread kamera mulai memproses setelah status siap
+        GambarCincin(0, PetunjukAwal);
     }
 
     private void Berhenti_Click(object sender, RoutedEventArgs e) => Selesai("Dihentikan. Pilih orang lalu tekan Mulai.");
@@ -238,11 +288,11 @@ public partial class DaftarWajahWindow : Window
         BerhentiButton.IsEnabled = false;
         MulaiButton.IsEnabled = OrangList.SelectedItem is OrangWajah;
         PetunjukText.Text = pesan;
-        YawText.Text = "";
         LangkahText.Text = "";
+        GambarCincin(0, null);
     }
 
-    /// <summary>Tiga sampel diterima: muat ulang status, lalu (mode otomatis) mulai orang berikutnya yang belum lengkap sesuai urutan abjad.</summary>
+    /// <summary>Tiga foto diterima: muat ulang status, lalu (mode otomatis) mulai orang berikutnya yang belum lengkap sesuai urutan abjad.</summary>
     private async Task OrangSelesaiAsync(OrangWajah orang)
     {
         Selesai($"✓ {orang.Nama} selesai didaftarkan.");

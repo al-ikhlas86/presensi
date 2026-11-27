@@ -55,6 +55,10 @@ public sealed class AnalisisWajah
     public double Yaw { get; set; }
     public double UkuranWajah { get; set; }
     public double? Blur { get; set; }
+    /// <summary>Pusat dan lebar kotak wajah sebagai pecahan 0..1 dari frame (null = server lama belum mengirim).</summary>
+    public double? Cx { get; set; }
+    public double? Cy { get; set; }
+    public double? Lebar { get; set; }
 }
 
 /// <summary>
@@ -118,14 +122,17 @@ public sealed class WajahApiClient
             a.Yaw = Desimal(d, "yaw") ?? 0;
             a.UkuranWajah = Desimal(d, "face_size") ?? 0;
             a.Blur = Desimal(d, "blur");
+            a.Cx = Desimal(d, "cx");
+            a.Cy = Desimal(d, "cy");
+            a.Lebar = Desimal(d, "w");
         }
         return new HasilDaftar<AnalisisWajah> { Berhasil = true, Data = a };
     }
 
-    /// <summary>Mengirim satu sampel (jenis: siswa | guru | pegawai; angle: front | left | right). Berhasil = diterima face-service; ditolak karena kualitas = false + pesan.</summary>
-    public async Task<HasilDaftar<bool>> KirimSampelAsync(string jenis, int id, string angle, byte[] jpeg)
+    /// <summary>Mengirim satu sampel (jenis: siswa | guru | pegawai; angle: front | left | right; nomor 1..3 = front_1..front_3). Berhasil = diterima face-service; ditolak karena kualitas = false + pesan.</summary>
+    public async Task<HasilDaftar<bool>> KirimSampelAsync(string jenis, int id, string angle, int nomor, byte[] jpeg)
     {
-        var (ok, pesan, _) = await KirimAsync(HttpMethod.Post, "wajah/sampel", new { jenis, id, angle, image_base64 = Convert.ToBase64String(jpeg) }).ConfigureAwait(false);
+        var (ok, pesan, _) = await KirimAsync(HttpMethod.Post, "wajah/sampel", new { jenis, id, angle, nomor, image_base64 = Convert.ToBase64String(jpeg) }).ConfigureAwait(false);
         return new HasilDaftar<bool> { Berhasil = ok, Pesan = pesan, Data = ok };
     }
 
